@@ -1,0 +1,79 @@
+openapi: 3.0.3
+
+info:
+  title: ReCasaOS MCP API
+  version: v2
+  description: |
+    Lets an AI assistant you choose read and manage this box, with a token you create.
+
+    Every route is for the administrator and the box's own services. The MCP endpoint itself, `/v2/mcp/server`, is not a REST route and is not described here.
+
+    For issues, please visit the [GitHub repository](https://github.com/ReCasaOS/ReCasaOS-MCP).
+
+servers:
+  - url: /v2/mcp
+
+paths:
+  /status:
+    get:
+      summary: The module's version, its endpoint, and what the assistants may do
+      operationId: getStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "403":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+components:
+  responses:
+    Error:
+      description: A message
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BaseResponse"
+
+  schemas:
+    BaseResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    Status:
+      type: object
+      required: [version, endpoint, actions, unclassified, tokens]
+      properties:
+        version:
+          type: string
+        endpoint:
+          type: string
+          description: The path an assistant connects to
+          example: /v2/mcp/server
+        actions:
+          $ref: "#/components/schemas/ActionCounts"
+        unclassified:
+          type: integer
+          description: How many actions of the box are not classified yet
+        tokens:
+          type: integer
+          description: How many tokens exist
+
+    ActionCounts:
+      type: object
+      required: [read, secret, change, danger]
+      properties:
+        read:
+          type: integer
+        secret:
+          type: integer
+        change:
+          type: integer
+        danger:
+          type: integer
