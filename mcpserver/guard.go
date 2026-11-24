@@ -44,15 +44,15 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if blocked, wait := g.limit.blocked(source); blocked {
-		w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
-		http.Error(w, "too many failed attempts: try again later", http.StatusTooManyRequests)
-		return
-	}
-
+	// Tokens are 256 random bits: limiting lookups protects nothing. The limit only tells a
+	// misconfigured client to slow down, and must never lock the owner's valid token out.
 	t, ok := g.authenticate(r)
 	if !ok {
-		g.limit.fail(source)
+		if over, wait := g.limit.fail(source); over {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
+			http.Error(w, "too many failed attempts: try again later", http.StatusTooManyRequests)
+			return
+		}
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "a valid token is needed", http.StatusUnauthorized)
 		return

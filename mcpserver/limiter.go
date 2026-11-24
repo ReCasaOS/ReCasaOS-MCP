@@ -32,31 +32,27 @@ func newLimiter(now func() time.Time, capacity int) *limiter {
 
 func (l *limiter) live(w window, now time.Time) bool { return now.Sub(w.start) < failWindow }
 
-// blocked says whether addr has used up its failures, and for how long it stays blocked.
-func (l *limiter) blocked(addr string) (bool, time.Duration) {
+// fail records a failure of addr and says, in the same locked step, whether addr is now
+// over the limit and for how long it stays so.
+func (l *limiter) fail(addr string) (over bool, wait time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
 	w, ok := l.m[addr]
-	if !ok || !l.live(w, now) || w.n < maxFailures {
+	switch {
+	case ok && l.live(w, now):
+		w.n++
+	case !ok && len(l.m) >= l.capacity:
+		l.makeRoom(now)
+		fallthrough
+	default:
+		w = window{start: now, n: 1}
+	}
+	l.m[addr] = w
+	if w.n <= maxFailures {
 		return false, 0
 	}
 	return true, w.start.Add(failWindow).Sub(now)
-}
-
-func (l *limiter) fail(addr string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.now()
-	if w, ok := l.m[addr]; ok && l.live(w, now) {
-		w.n++
-		l.m[addr] = w
-		return
-	}
-	if _, ok := l.m[addr]; !ok && len(l.m) >= l.capacity {
-		l.makeRoom(now)
-	}
-	l.m[addr] = window{start: now, n: 1}
 }
 
 // makeRoom drops the expired entries, or the oldest one when none has expired.

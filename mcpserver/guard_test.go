@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ReCasaOS/ReCasaOS-MCP/service"
 )
@@ -155,26 +154,24 @@ func TestElevenBadTokensIs429(t *testing.T) {
 	}
 }
 
-// Once an address is blocked even the right token is refused until the window passes: the
-// token is not looked up at all, so guessing gets no answer. The owner's own client waits a
-// minute; that is the intended trade-off.
-func TestRateLimitedAddressIsNotLookedUp(t *testing.T) {
+// Bad tokens from an address never lock out a valid token from the same address.
+func TestAValidTokenPassesFromABlockedAddress(t *testing.T) {
 	f := newFixture(t)
-	plain, tok := f.token(service.LevelFull, 7)
-	for i := 0; i < 10; i++ {
-		post(t, f.srv.URL, bearer("rcm_bad"), listBody)
-	}
-	if code := post(t, f.srv.URL, bearer(plain), listBody).StatusCode; code != http.StatusTooManyRequests {
-		t.Fatalf("%d, want 429", code)
-	}
-	for _, t2 := range f.tokens.List() {
-		if t2.ID == tok.ID && !t2.LastUsed.IsZero() {
-			t.Fatal("the token was looked up")
+	plain, _ := f.token(service.LevelRead, 7)
+	for i := 0; i < 11; i++ {
+		resp := post(t, f.srv.URL, bearer("rcm_bad"), listBody)
+		if want := map[bool]int{true: http.StatusTooManyRequests, false: http.StatusUnauthorized}[i == 10]; resp.StatusCode != want {
+			t.Fatalf("bad token %d: %d, want %d", i+1, resp.StatusCode, want)
 		}
 	}
-	f.clock.add(time.Minute)
 	if code := post(t, f.srv.URL, bearer(plain), listBody).StatusCode; code != http.StatusOK {
-		t.Fatalf("after the window: %d, want 200", code)
+		t.Fatalf("the valid token: %d, want 200", code)
+	}
+	if names, _ := toolNames(t, f.connect(plain)); names != "describe_action,read,search_actions" {
+		t.Fatal(names)
+	}
+	if resp := post(t, f.srv.URL, bearer("rcm_bad"), listBody); resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") == "" {
+		t.Fatalf("a bad token after the valid one: %d", resp.StatusCode)
 	}
 }
 

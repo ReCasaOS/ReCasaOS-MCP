@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -18,25 +19,47 @@ func (c *clock) now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
 
 func (c *clock) add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
-func TestLimiterBlocksAfterTenFailuresForAMinute(t *testing.T) {
+func TestLimiterIsOverAfterTenFailuresForAMinute(t *testing.T) {
 	c := newClock()
 	l := newLimiter(c.now, 100)
 	for i := 0; i < 10; i++ {
-		if blocked, _ := l.blocked("a"); blocked {
-			t.Fatalf("blocked after %d failures", i)
+		if over, _ := l.fail("a"); over {
+			t.Fatalf("over at failure %d", i+1)
 		}
-		l.fail("a")
 	}
-	blocked, wait := l.blocked("a")
-	if !blocked || wait <= 0 || wait > time.Minute {
-		t.Fatalf("blocked %v wait %v", blocked, wait)
+	over, wait := l.fail("a")
+	if !over || wait <= 0 || wait > time.Minute {
+		t.Fatalf("over %v wait %v", over, wait)
 	}
-	if blocked, _ := l.blocked("b"); blocked {
-		t.Fatal("another address is blocked too")
+	if over, _ := l.fail("b"); over {
+		t.Fatal("another address is over too")
 	}
 	c.add(time.Minute)
-	if blocked, _ := l.blocked("a"); blocked {
-		t.Fatal("still blocked once the window passed")
+	if over, _ := l.fail("a"); over || l.failures("a") != 1 {
+		t.Fatal("still over once the window passed")
+	}
+}
+
+// Run with -race where cgo is available.
+func TestABurstOfBadTokensIsCountedOnce(t *testing.T) {
+	l := newLimiter(newClock().now, 100)
+	const n = 50
+	var under, over atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if o, _ := l.fail("a"); o {
+				over.Add(1)
+			} else {
+				under.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if under.Load() != 10 || over.Load() != n-10 {
+		t.Fatalf("%d under, %d over", under.Load(), over.Load())
 	}
 }
 
@@ -55,7 +78,7 @@ func TestLimiterIsBounded(t *testing.T) {
 	if n := l.size(); n != 3 {
 		t.Fatalf("%d addresses tracked, want 3", n)
 	}
-	if blocked, _ := l.blocked("old"); blocked {
+	if l.failures("old") != 0 {
 		t.Fatal("the oldest entry was not evicted")
 	}
 
@@ -86,7 +109,6 @@ func TestLimiterIsSafeForConcurrentUse(t *testing.T) {
 			for i := 0; i < 200; i++ {
 				a := strconv.Itoa((g*200 + i) % 70)
 				l.fail(a)
-				l.blocked(a)
 			}
 		}(g)
 	}
