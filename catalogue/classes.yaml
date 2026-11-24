@@ -23,6 +23,143 @@
 "GET /v2/casaos/zt/info": secret # the remote-access ZeroTier network id, which lets anyone join it
 "PUT /v2/casaos/zt/{network_id}/status": change # sets a ZeroTier network's status (does nothing for now)
 
+# --- app_management (v2) ---
+"GET /v2/app_management/apps": read # the app store catalogue
+"GET /v2/app_management/apps/upgradable": read # installed apps the store has an update for
+"GET /v2/app_management/apps/{id}": read # one store app's details
+"GET /v2/app_management/apps/{id}/compose": read # a store app's compose template
+"GET /v2/app_management/apps/{id}/stable": read # a store app's stable version tag
+"GET /v2/app_management/apps/{id}/stable/{serviceName}": read # a store app service's stable version tag
+"GET /v2/app_management/appstore": read # the registered app stores
+"POST /v2/app_management/appstore": change # add an app store
+"DELETE /v2/app_management/appstore/{id}": change # remove an app store from the list
+"GET /v2/app_management/auto-update": read # the apps that update by themselves and the last nights
+"PUT /v2/app_management/auto-update": change # set how long an update waits before a night applies it
+"GET /v2/app_management/backup/destinations": read # the names of the backup destinations
+"DELETE /v2/app_management/backup/destinations/{name}": danger # forget a backup destination
+"PUT /v2/app_management/backup/destinations/{name}": danger # add or replace a backup destination and its credentials
+"POST /v2/app_management/backup/destinations/{name}/check": read # ask a destination whether it is reachable and its space
+"GET /v2/app_management/backup/destinations/{name}/folders": read # the folders under a path of a destination
+"DELETE /v2/app_management/backup/destinations/{name}/restic": change # send a destination's next backups back to rclone
+"GET /v2/app_management/backup/destinations/{name}/restic": read # whether a destination keeps its backups with restic
+"PUT /v2/app_management/backup/destinations/{name}/restic": change # switch a destination to restic, answering its repository password
+"POST /v2/app_management/backup/destinations/{name}/restic/check": change # start a check of a destination's restic repository
+"GET /v2/app_management/backup/destinations/{name}/restic/password": secret # the password of a destination's restic repository
+"GET /v2/app_management/backup/destinations/{name}/runs": read # the backups a destination holds
+"DELETE /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}": danger # delete one backup at a destination
+"GET /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}/files": read # list the files inside one backup
+"GET /v2/app_management/backup/exclusions": read # the folders no backup of an app copies
+"PUT /v2/app_management/backup/exclusions": change # replace the folders no backup of an app copies
+"POST /v2/app_management/backup/restore": danger # put an app or the box back from a backup
+"GET /v2/app_management/backup/running": read # the backups that run now
+"POST /v2/app_management/backup/running/{backup_id}/stop": change # stop one backup that runs
+"GET /v2/app_management/backup/runs": read # the history of backup runs
+"GET /v2/app_management/backup/schedules": read # the backup schedules
+"PUT /v2/app_management/backup/schedules": danger # replace the backup schedules and how many backups they keep
+"POST /v2/app_management/backup/schedules/run": change # run backup schedules now
+"POST /v2/app_management/backup/signin": never # start signing in to a cloud drive
+"POST /v2/app_management/backup/signin/finish": never # finish signing in to a cloud drive, answering its token
+"POST /v2/app_management/backup/system": change # start a backup of the box itself
+"GET /v2/app_management/backup/verification-schedule": read # when backups are read back on their own
+"PUT /v2/app_management/backup/verification-schedule": change # set when backups are read back on their own
+"GET /v2/app_management/backup/verifications": read # the results of backup verifications
+"POST /v2/app_management/backup/verifications": change # start reading a backup back to verify it
+"POST /v2/app_management/backup/verifications/{verification_id}/cancel": change # cancel a running backup verification
+"GET /v2/app_management/categories": read # the app store's categories
+"GET /v2/app_management/cleanup": read # what a cleanup could free on the disk
+"DELETE /v2/app_management/cleanup/build-cache": danger # delete the build cache
+"POST /v2/app_management/cleanup/images": danger # delete leftover images
+"POST /v2/app_management/cleanup/orphans": danger # move aside the folders of apps that are gone
+"GET /v2/app_management/cleanup/schedule": read # the weekly cleanup and what it freed
+"PUT /v2/app_management/cleanup/schedule": change # turn the weekly cleanup on or off
+"POST /v2/app_management/cleanup/volumes": danger # delete leftover volumes
+"GET /v2/app_management/compose": secret # installed apps with their compose files
+"POST /v2/app_management/compose": change # install an app
+"GET /v2/app_management/compose/updates": change # plan an update of every app, can check the registries
+"POST /v2/app_management/compose/updates": change # update several apps at once
+"GET /v2/app_management/compose/updates/run": read # progress of the update of every app
+"DELETE /v2/app_management/compose/{id}": danger # uninstall an app
+"GET /v2/app_management/compose/{id}": secret # an installed app with its compose file
+"PATCH /v2/app_management/compose/{id}": change # update an app to the store's version
+"PUT /v2/app_management/compose/{id}": change # apply new settings to an app
+"PUT /v2/app_management/compose/{id}/auto-update": change # turn an app's nightly update on or off
+"POST /v2/app_management/compose/{id}/backup": danger # back an app up, can prune its older backups
+"GET /v2/app_management/compose/{id}/containers": secret # an app's containers with their labels and commands
+"GET /v2/app_management/compose/{id}/containers/stats": read # CPU and memory of an app's containers
+"GET /v2/app_management/compose/{id}/containers/{containerId}/health": secret # a container's health check command and output
+"PUT /v2/app_management/compose/{id}/containers/{containerId}/status": change # start, stop or restart one container of an app
+"GET /v2/app_management/compose/{id}/env": secret # an app's .env values
+"PUT /v2/app_management/compose/{id}/env": change # replace an app's .env values
+"GET /v2/app_management/compose/{id}/healthcheck": read # whether an app's web page answers
+"GET /v2/app_management/compose/{id}/logs": secret # an app's recent log lines
+"PUT /v2/app_management/compose/{id}/status": change # start, stop or restart an app
+"DELETE /v2/app_management/container/{id}": danger # delete a container and the volumes asked for
+"PATCH /v2/app_management/container/{id}": change # recreate a container, optionally with a newer image
+"GET /v2/app_management/container/{id}/detail": secret # a container's details with its environment
+"DELETE /v2/app_management/container/{id}/files": danger # delete a file or folder inside a container
+"GET /v2/app_management/container/{id}/files": read # list a folder inside a container
+"GET /v2/app_management/container/{id}/files/content": secret # read a text file inside a container
+"PUT /v2/app_management/container/{id}/files/content": danger # write or overwrite a text file inside a container
+"GET /v2/app_management/container/{id}/files/download": never # download a file from a container
+"POST /v2/app_management/container/{id}/files/folder": change # make a folder inside a container
+"POST /v2/app_management/container/{id}/files/upload": never # upload a file into a container
+"GET /v2/app_management/container/{id}/healthcheck": read # whether a container is healthy
+"POST /v2/app_management/convert": read # turn a legacy app description into compose YAML
+"GET /v2/app_management/dashboard-hidden/{app}": read # whether an app's icon is hidden from the dashboard
+"PUT /v2/app_management/dashboard-hidden/{app}": change # hide or show an app's icon on the dashboard
+"POST /v2/app_management/git": change # register an app from a git repository
+"DELETE /v2/app_management/git/{app}": danger # remove a git app
+"GET /v2/app_management/git/{app}": secret # a git app with its webhook secret
+"PUT /v2/app_management/git/{app}": change # change a git app's settings
+"POST /v2/app_management/git/{app}/check": change # fetch a git app's repository for new commits
+"POST /v2/app_management/git/{app}/deploy": change # deploy a git app
+"GET /v2/app_management/git/{app}/tags": read # the tags of a git app's repository
+"POST /v2/app_management/git/{app}/webhook": never # a git forge's webhook delivery
+"GET /v2/app_management/global": secret # the global app variables, API keys included
+"DELETE /v2/app_management/global/{key}": danger # remove a global app variable from every app
+"GET /v2/app_management/global/{key}": secret # one global app variable with its value
+"PUT /v2/app_management/global/{key}": change # set a global app variable for every app
+"POST /v2/app_management/image": change # pull the latest images of containers
+"POST /v2/app_management/image-updates": change # check every app for a newer image and record it
+"DELETE /v2/app_management/images/dangling": danger # delete dangling images
+"GET /v2/app_management/images/dangling": read # the disk dangling images hold
+"GET /v2/app_management/info": read # the box's architecture and API features
+"GET /v2/app_management/logs": secret # a page of app log lines
+"GET /v2/app_management/logs/apps": read # the apps that have logs
+"GET /v2/app_management/logs/events": read # app events: started, stopped, updated
+"GET /v2/app_management/logs/export": never # download app logs as a file
+"GET /v2/app_management/logs/settings": read # log retention, size cap and use
+"PUT /v2/app_management/logs/settings": change # set log retention and size cap
+"GET /v2/app_management/logs/stream": never # live app log lines over a websocket
+"GET /v2/app_management/operations": read # what runs on the apps right now
+"GET /v2/app_management/stats": read # containers with their latest CPU and memory
+"GET /v2/app_management/stats/{id}": read # one container's CPU and memory history
+"GET /v2/app_management/stats/{id}/alerts": read # one container's alert rules and firing alerts
+"PUT /v2/app_management/stats/{id}/alerts": change # set one container's alert rules
+"GET /v2/app_management/sync/tasks": read # the scheduled folder syncs
+"PUT /v2/app_management/sync/tasks": danger # replace the scheduled folder syncs
+"POST /v2/app_management/sync/tasks/{id}/confirm-deletes": danger # let a sync task delete what it held back
+"POST /v2/app_management/sync/tasks/{id}/first-pass": change # run the first pass of a sync task
+"POST /v2/app_management/sync/tasks/{id}/run": change # run a sync task now
+"GET /v2/app_management/visibility-orphans": read # visibility entries of apps no longer installed
+"DELETE /v2/app_management/visibility/accounts/{id}": never # internal: forget an account deleted by the user service
+"DELETE /v2/app_management/visibility/{app}": change # show an app to every account again
+"GET /v2/app_management/visibility/{app}": read # the accounts an app is hidden from
+"PUT /v2/app_management/visibility/{app}": change # set the accounts an app is hidden from
+"GET /v2/app_management/web/appgrid": read # the dashboard's apps
+"GET /v2/app_management/web/frame-check": change # ask a URL whether it can be shown in a frame
+"POST /v2/app_management/web/sync/appstore": change # add an app store and wait for it
+
+# --- app_management v1 container ---
+"GET /v1/container/archive/{id}": never # the description says GET, the service registers PUT: not callable as described
+"GET /v1/container/networks": read # the Docker networks
+"GET /v1/container/usage": read # CPU and memory of every container
+"DELETE /v1/container/{id}": danger # uninstall a legacy container app
+"GET /v1/container/{id}": secret # a legacy container's settings with its environment
+"PUT /v1/container/{id}": change # recreate a legacy container with new settings
+"GET /v1/container/{id}/compose": secret # a legacy container as compose YAML with its environment
+"GET /v1/container/{id}/terminal": never # a shell inside a container
+
 # --- local_storage ---
 "GET /v2/local_storage/merge": read # the storage merges and their source volumes
 "POST /v2/local_storage/merge": danger # creates, changes or removes a storage merge
