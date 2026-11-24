@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Endpoint is the path an assistant connects to.
 const Endpoint = service.Endpoint
 
 type MCP struct {

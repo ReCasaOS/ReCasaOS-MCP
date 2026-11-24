@@ -54,8 +54,8 @@ func LANURL(gatewayINI string) (string, bool) {
 	if err != nil || !ip.Is4() || !isPrivate(ip) {
 		return "", false
 	}
-	gw, err := gatewayAddress(gatewayINI)
-	if err != nil {
+	gw, all, err := gatewayListener(gatewayINI)
+	if err != nil || !all { // a Gateway bound to the box's loopback cannot be reached from the network
 		return "", false
 	}
 	return lanURL(ip, gw.Port()), true
