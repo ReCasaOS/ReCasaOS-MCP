@@ -8,9 +8,9 @@ class is not offered.
 
 ## Status
 
-Offered by ReCasaOS from v0.5.191, in the community tier: it has run on a stack in a
-container, not yet on a real box (see the last section). It needs CasaOS-Gateway v0.4.40
-and CasaOS-UserService v0.4.39, which that release carries.
+Offered by ReCasaOS from v0.5.192, in the core tier, on the Modules page or with
+`casaos module install mcp`. It needs CasaOS-Gateway v0.4.40 and CasaOS-UserService
+v0.4.39, which that release carries.
 
 ## Routes
 
