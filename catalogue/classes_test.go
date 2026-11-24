@@ -74,7 +74,6 @@ func TestEveryClassIsKnown(t *testing.T) {
 }
 
 func TestEveryDescribedActionIsClassedOrCounted(t *testing.T) {
-	t.Skip("the classification of the described actions is Task 9; this test comes back on there")
 	classes := catalogue.Classes()
 	var missing []string
 	for id := range described(t) {
@@ -154,5 +153,65 @@ func TestSourcesAreTheSevenDescriptions(t *testing.T) {
 	}
 	if got := catalogue.Sources(); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("got %v", got)
+	}
+}
+
+// Actions known to answer with a secret (or to take one): never plain reads.
+func TestKnownSecretsAreNotRead(t *testing.T) {
+	known := []string{
+		"GET /v1/container/{id}",
+		"GET /v1/container/{id}/compose",
+		"GET /v2/app_management/backup/destinations/{name}/restic/password",
+		"GET /v2/app_management/compose",
+		"GET /v2/app_management/compose/{id}",
+		"GET /v2/app_management/compose/{id}/containers",
+		"GET /v2/app_management/compose/{id}/containers/{containerId}/health",
+		"GET /v2/app_management/compose/{id}/env",
+		"GET /v2/app_management/compose/{id}/logs",
+		"GET /v2/app_management/container/{id}/detail",
+		"GET /v2/app_management/container/{id}/files/content",
+		"GET /v2/app_management/git/{app}",
+		"GET /v2/app_management/global",
+		"GET /v2/app_management/global/{key}",
+		"GET /v2/app_management/logs",
+		"GET /v2/casaos/zt/info",
+		"GET /v2/virt_management/images/downloads",
+		"PUT /v2/app_management/backup/destinations/{name}/restic",
+	}
+	classes := catalogue.Classes()
+	for _, id := range known {
+		c, ok := classes[id]
+		if !ok {
+			t.Errorf("%s has no class", id)
+		} else if c == catalogue.Read {
+			t.Errorf("%s answers with a secret, it cannot be read", id)
+		}
+	}
+}
+
+// A deliberate, visible edit is needed to change the class of any described action.
+func TestClassCounts(t *testing.T) {
+	want := map[catalogue.Class]int{
+		catalogue.Read: 64, catalogue.Secret: 17, catalogue.Change: 60, catalogue.Danger: 29, catalogue.Never: 16,
+	}
+	got := map[catalogue.Class]int{}
+	classes := catalogue.Classes()
+	for id := range described(t) {
+		got[classes[id]]++
+	}
+	for c, n := range want {
+		if got[c] != n {
+			t.Errorf("%s: %d described actions, want %d", c, got[c], n)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("classes in use %v, want %v", got, want)
+	}
+}
+
+func TestNoActingReadThroughACallerChosenHost(t *testing.T) {
+	const id = "GET /v2/app_management/web/frame-check"
+	if c := catalogue.Classes()[id]; c == catalogue.Read {
+		t.Errorf("%s makes the box call a host the caller chooses: not a read", id)
 	}
 }
