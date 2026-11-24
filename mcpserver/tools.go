@@ -38,15 +38,16 @@ func failure(action, text string) outcome {
 
 func (ts *tools) handler(t service.Token, tool string) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		ts.refresh.ensure(ctx, t.Account)
 		var o outcome
-		switch tool {
-		case "search_actions":
+		switch loaded := ts.refresh.ensure(ctx, t.Account); {
+		case tool == "search_actions" && !loaded:
+			o = failure("-", notLoaded)
+		case tool == "search_actions":
 			o = ts.search(t, req.Params.Arguments)
-		case "describe_action":
-			o = ts.describe(t, req.Params.Arguments)
+		case tool == "describe_action":
+			o = ts.describe(t, req.Params.Arguments, loaded)
 		default:
-			o = ts.run(ctx, t, tool, req.Params.Arguments)
+			o = ts.run(ctx, t, tool, req.Params.Arguments, loaded)
 		}
 		ts.deps.Journal.Write(t, tool, o.action, o.status)
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: o.text}}, IsError: o.isError}, nil
@@ -90,7 +91,14 @@ func (ts *tools) visible(id string, level service.Level) (service.Action, bool) 
 	return a, true
 }
 
-func unknown(id string) outcome {
+const notLoaded = "the list of actions is not loaded yet; try again in a moment"
+
+// unknown is the answer for an action the token cannot see. Before the catalogue was ever
+// loaded, no action can be seen, and saying it is unknown would mislead.
+func unknown(id string, loaded bool) outcome {
+	if !loaded {
+		return failure("-", notLoaded)
+	}
 	if r := []rune(id); len(r) > 200 {
 		id = string(r[:200])
 	}
@@ -138,7 +146,7 @@ func (ts *tools) search(t service.Token, raw json.RawMessage) outcome {
 	return outcome{text: asJSON(hits), action: "-", status: "ok"}
 }
 
-func (ts *tools) describe(t service.Token, raw json.RawMessage) outcome {
+func (ts *tools) describe(t service.Token, raw json.RawMessage, loaded bool) outcome {
 	var in struct {
 		Action *string `json:"action"`
 	}
@@ -150,14 +158,14 @@ func (ts *tools) describe(t service.Token, raw json.RawMessage) outcome {
 	}
 	a, ok := ts.visible(*in.Action, t.Level)
 	if !ok {
-		return unknown(*in.Action)
+		return unknown(*in.Action, loaded)
 	}
 	d := service.DescribeAction(a)
 	d["tool"] = toolFor(a.Class)
 	return outcome{text: asJSON(d), action: a.ID, status: "ok"}
 }
 
-func (ts *tools) run(ctx context.Context, t service.Token, tool string, raw json.RawMessage) outcome {
+func (ts *tools) run(ctx context.Context, t service.Token, tool string, raw json.RawMessage, loaded bool) outcome {
 	var in struct {
 		Action *string         `json:"action"`
 		Params map[string]any  `json:"params"`
@@ -176,7 +184,7 @@ func (ts *tools) run(ctx context.Context, t service.Token, tool string, raw json
 	// the level before the class: a read token is never told which tool an action needs
 	a, ok := ts.visible(*in.Action, t.Level)
 	if !ok {
-		return unknown(*in.Action)
+		return unknown(*in.Action, loaded)
 	}
 	if want := toolFor(a.Class); want != tool {
 		return failure(a.ID, fmt.Sprintf("use the %q tool for this action", want))

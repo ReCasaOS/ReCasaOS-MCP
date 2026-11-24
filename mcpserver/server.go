@@ -20,6 +20,7 @@ const (
 	refreshEvery   = 10 * time.Minute
 	retryFailed    = time.Minute
 	refreshTimeout = 2 * time.Minute
+	firstWait      = 30 * time.Second
 )
 
 // Deps is what the endpoint is built on.
@@ -129,43 +130,61 @@ func (ts *tools) server(r *http.Request) *mcp.Server {
 	return s
 }
 
-// refresher loads the catalogue on use: at the first tool call, then when it is older than
-// refreshEvery. Concurrent calls share one refresh.
+// refresher loads the catalogue on use. Until a first load succeeds, callers wait for it,
+// up to firstWait each. Once loaded, a stale catalogue starts one refresh in the background
+// and the call is served at once from the catalogue as it is. One refresh runs at a time.
 type refresher struct {
 	cat *service.Catalogue
 	now func() time.Time
 
 	mu      sync.Mutex
-	next    time.Time // zero: never loaded
+	next    time.Time // when a refresh is due; zero: now
+	loaded  bool
 	running chan struct{}
 }
 
-func (r *refresher) ensure(ctx context.Context, account int) {
+// ensure starts a refresh when one is due, waits for it only while nothing is loaded, and
+// says whether a catalogue is loaded.
+func (r *refresher) ensure(ctx context.Context, account int) bool {
 	r.mu.Lock()
-	if r.running != nil {
-		wait := r.running
-		r.mu.Unlock()
-		select {
-		case <-wait:
-		case <-ctx.Done():
-		}
-		return
+	if r.running == nil && !r.now().Before(r.next) {
+		r.running = make(chan struct{})
+		go r.refresh(r.running, account)
 	}
-	if r.now().Before(r.next) {
-		r.mu.Unlock()
-		return
-	}
-	done := make(chan struct{})
-	r.running = done
+	wait, loaded := r.running, r.loaded
 	r.mu.Unlock()
+	if loaded || wait == nil {
+		return loaded
+	}
 
-	// detached: the callers waiting on this refresh must not fail with the first one
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshTimeout)
-	err := r.cat.Refresh(rctx, account)
+	timer := time.NewTimer(firstWait)
+	defer timer.Stop()
+	select {
+	case <-wait:
+	case <-ctx.Done():
+	case <-timer.C:
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.loaded
+}
+
+// refresh runs apart from any request; shortcut: it is bounded by refreshTimeout only, not
+// cancelled at shutdown, as the endpoint has no base context to hang it on.
+func (r *refresher) refresh(done chan struct{}, account int) {
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	err := r.cat.Refresh(ctx, account)
 	cancel()
 	logRefresh(err)
+	// a source that fails does not make the others unloaded
+	byClass, unclassified := r.cat.Counts()
+	some := unclassified > 0
+	for _, n := range byClass {
+		some = some || n > 0
+	}
 
 	r.mu.Lock()
+	r.loaded = r.loaded || err == nil || some
 	r.next = r.now().Add(refreshEvery)
 	if err != nil {
 		r.next = r.now().Add(retryFailed)

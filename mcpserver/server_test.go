@@ -87,9 +87,11 @@ type fixture struct {
 	accountCalls atomic.Int32
 	actionHits   atomic.Int32
 	docHits      atomic.Int32
+	gatewayHits  atomic.Int32
 
 	mu      sync.Mutex
 	spec    string
+	docWait chan struct{}               // when set, the description is served once it is closed
 	status  map[int]int                 // of the accounts service, by account; 200 when absent
 	actions map[string]http.HandlerFunc // by "METHOD /path"; JSON {"ok":true} when absent
 }
@@ -127,12 +129,16 @@ func newFixtureWith(t *testing.T, tokens *service.Store) *fixture {
 	t.Cleanup(accounts.Close)
 
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.gatewayHits.Add(1)
 		f.mu.Lock()
-		spec, action := f.spec, f.actions[r.Method+" "+r.URL.Path]
+		spec, action, docWait := f.spec, f.actions[r.Method+" "+r.URL.Path], f.docWait
 		f.mu.Unlock()
 		switch {
 		case r.URL.Path == source:
 			f.docHits.Add(1)
+			if docWait != nil {
+				<-docWait
+			}
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte(spec))
 		case strings.Contains(r.URL.Path, "openapi"):
@@ -465,8 +471,115 @@ func TestActionGoneAfterRefreshIsUnknown(t *testing.T) {
 		t.Fatal("the catalogue was refreshed before ten minutes")
 	}
 	f.clock.add(2 * time.Minute)
-	if text, isErr := call(t, cs, "read", map[string]any{"action": "GET /v2/app_management/apps"}); !isErr || text != unknownText("GET /v2/app_management/apps") {
+	// the stale catalogue still serves this call and starts a refresh behind it
+	call(t, cs, "read", map[string]any{"action": "GET /v2/app_management/apps"})
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		text, isErr := call(t, cs, "read", map[string]any{"action": "GET /v2/app_management/apps"})
+		if isErr && text == unknownText("GET /v2/app_management/apps") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the action is still served: %s", text)
+		}
+	}
+}
+
+// callWithin runs a tool with a deadline of its own and reports how long it took.
+func callWithin(t *testing.T, cs *mcp.ClientSession, d time.Duration, tool string, args map[string]any) (*mcp.CallToolResult, time.Duration, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	start := time.Now()
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: args})
+	return res, time.Since(start), err
+}
+
+func TestASlowRefreshDoesNotHoldUpCalls(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	cs := f.connect(plain)
+	if _, isErr := call(t, cs, "read", map[string]any{"action": "GET /v2/app_management/apps"}); isErr {
+		t.Fatal("first call")
+	}
+	release := make(chan struct{})
+	f.mu.Lock()
+	f.docWait = release
+	f.spec = strings.Replace(fullSpec, "    get: {summary: List the apps, operationId: listApps, responses: {'200': {description: ok}}}\n", "", 1)
+	f.mu.Unlock()
+	t.Cleanup(func() { close(release) }) // before the fake Gateway closes: it waits for its requests
+
+	f.clock.add(11 * time.Minute)
+	res, took, err := callWithin(t, cs, 5*time.Second, "read", map[string]any{"action": "GET /v2/app_management/apps"})
+	if err != nil || res.IsError || took > 2*time.Second {
+		t.Fatalf("%v %+v after %v", err, res, took)
+	}
+	for deadline := time.Now().Add(5 * time.Second); f.docHits.Load() != 2; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no refresh was started")
+		}
+	}
+	// a second call while the refresh hangs starts no other one
+	if res, _, err := callWithin(t, cs, 5*time.Second, "read", map[string]any{"action": "GET /v2/app_management/apps"}); err != nil || res.IsError || f.docHits.Load() != 2 {
+		t.Fatalf("%v %+v, %d description reads", err, res, f.docHits.Load())
+	}
+}
+
+func TestASlowActionDoesNotHoldUpOtherCalls(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	cs := f.connect(plain)
+	release, started := make(chan struct{}), make(chan struct{})
+	f.setAction("GET /v2/app_management/file", func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "read", Arguments: map[string]any{"action": "GET /v2/app_management/file"}})
+	}()
+	defer func() { close(release); <-done }()
+	<-started
+
+	res, took, err := callWithin(t, cs, 5*time.Second, "read", map[string]any{"action": "GET /v2/app_management/apps"})
+	if err != nil || res.IsError || took > 2*time.Second {
+		t.Fatalf("%v %+v after %v", err, res, took)
+	}
+}
+
+func TestFirstCallWaitsForTheFirstRefresh(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	release := make(chan struct{})
+	f.mu.Lock()
+	f.docWait = release
+	f.mu.Unlock()
+	go func() { time.Sleep(100 * time.Millisecond); close(release) }()
+	if text, isErr := call(t, f.connect(plain), "read", map[string]any{"action": "GET /v2/app_management/apps"}); isErr || text != `{"status":200,"body":{"ok":true},"truncated":false}` {
 		t.Fatal(text)
+	}
+}
+
+func TestNotLoadedYetIsSaidPlainly(t *testing.T) {
+	f := newFixture(t)
+	f.setStatus(7, http.StatusInternalServerError)
+	plain, _ := f.token(service.LevelFull, 7)
+	cs := f.connect(plain)
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+	}{
+		{"search_actions", map[string]any{"query": "apps"}},
+		{"read", map[string]any{"action": "GET /v2/app_management/apps"}},
+		{"describe_action", map[string]any{"action": "GET /v2/app_management/apps"}},
+	} {
+		if text, isErr := call(t, cs, c.tool, c.args); !isErr || text != notLoaded {
+			t.Errorf("%s: %s", c.tool, text)
+		}
+	}
+	if n := f.gatewayHits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the Gateway", n)
 	}
 }
 
@@ -479,8 +592,9 @@ func TestConcurrentCallsShareOneRefresh(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if text, isErr := call(t, cs, "read", map[string]any{"action": "GET /v2/app_management/apps"}); isErr {
-				t.Error(text)
+			res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "read", Arguments: map[string]any{"action": "GET /v2/app_management/apps"}})
+			if err != nil || res.IsError {
+				t.Errorf("%v %+v", err, res)
 			}
 		}()
 	}
