@@ -99,7 +99,10 @@ func main() {
 		}
 	}
 
-	if err := os.MkdirAll(config.AppInfo.StatePath, 0o700); err != nil {
+	warnStateDir := func(err error) {
+		logger.Warn("the state folder's permissions could not be set to 0700", zap.String("path", config.AppInfo.StatePath), zap.Error(err))
+	}
+	if err := service.PrepareStateDir(config.AppInfo.StatePath, warnStateDir); err != nil {
 		panic(err)
 	}
 
