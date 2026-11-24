@@ -38,6 +38,38 @@
 "DELETE /v2/users/event/{event_uuid}": change # dismisses one notice
 "GET /v2/users/events": read # the storage notices kept for the dashboard
 
+# --- virt_management ---
+"GET /v2/virt_management/host": read # what this host can run: libvirt, CPUs, memory, network
+"PUT /v2/virt_management/host/storage": change # sets the default folder for VM disks
+"GET /v2/virt_management/host/usb": read # the host's USB devices and which VM has each
+"GET /v2/virt_management/images": read # the installation images in the iso folder
+"GET /v2/virt_management/images/downloads": secret # the image downloads, with the full URL given, credentials included
+"POST /v2/virt_management/images/downloads": change # downloads an image from a URL into the iso folder
+"DELETE /v2/virt_management/images/downloads/{download}": change # cancels a running download or dismisses a finished one
+"PUT /v2/virt_management/images/upload": never # binary upload of an image
+"GET /v2/virt_management/stats": read # the VMs and their latest resource use
+"GET /v2/virt_management/stats/{id}": read # the resource history of one VM
+"GET /v2/virt_management/stats/{id}/alerts": read # the alert rules of one VM and its firing alerts
+"PUT /v2/virt_management/stats/{id}/alerts": change # changes the alert rules of one VM
+"GET /v2/virt_management/storage": read # whether a folder can hold VM disks and its free space
+"GET /v2/virt_management/vms": read # the virtual machines and their state
+"POST /v2/virt_management/vms": change # creates a virtual machine and its disk
+"DELETE /v2/virt_management/vms/{id}": danger # deletes a virtual machine, its disks too on request
+"GET /v2/virt_management/vms/{id}": read # one virtual machine and its settings
+"PATCH /v2/virt_management/vms/{id}": change # changes a VM's name, CPUs, memory, network or autostart
+"PUT /v2/virt_management/vms/{id}/cdrom": change # inserts or ejects the ISO in a VM's CD-ROM drive
+"GET /v2/virt_management/vms/{id}/console": never # the VM's VNC console over a websocket
+"POST /v2/virt_management/vms/{id}/disks": change # adds a new empty disk to a VM
+"DELETE /v2/virt_management/vms/{id}/disks/{target}": danger # takes a disk out of a VM, deleting its file on request
+"PATCH /v2/virt_management/vms/{id}/disks/{target}": change # grows a VM's disk
+"PUT /v2/virt_management/vms/{id}/ports": change # sets the host ports forwarded to a VM
+"PUT /v2/virt_management/vms/{id}/shares": change # sets the host folders shared with a VM
+"POST /v2/virt_management/vms/{id}/snapshots": change # takes a snapshot of a VM
+"DELETE /v2/virt_management/vms/{id}/snapshots/{snapshot}": danger # deletes a VM snapshot
+"POST /v2/virt_management/vms/{id}/snapshots/{snapshot}/revert": danger # puts a VM back to a snapshot, losing what changed since
+"PUT /v2/virt_management/vms/{id}/usb": change # sets the host USB devices given to a VM
+"POST /v2/virt_management/vms/{id}/{action}": danger # changes a VM's power state; force-off and reset pull the plug
+
 # --- vuln_scan ---
 "GET /v2/vuln_scan/apps": read # what the last vulnerability scan found, per app
 "GET /v2/vuln_scan/apps/{app}": read # the vulnerabilities of one app, image by image
