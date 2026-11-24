@@ -8,9 +8,9 @@ class is not offered.
 
 ## Status
 
-Not released, and not in the installer's catalogue. `min_recasaos` in `module.json` is a
-placeholder (`0.5.999`) until the ReCasaOS release that carries the two changes this module
-needs in the Gateway and in the accounts service.
+Offered by ReCasaOS from v0.5.191, in the community tier: it has run on a stack in a
+container, not yet on a real box (see the last section). It needs CasaOS-Gateway v0.4.40
+and CasaOS-UserService v0.4.39, which that release carries.
 
 ## Routes
 
