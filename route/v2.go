@@ -12,6 +12,7 @@ import (
 	"github.com/ReCasaOS/ReCasaOS-MCP/codegen"
 	"github.com/ReCasaOS/ReCasaOS-MCP/pkg/config"
 	v2Route "github.com/ReCasaOS/ReCasaOS-MCP/route/v2"
+	"github.com/ReCasaOS/ReCasaOS-MCP/service"
 	"github.com/deepmap/oapi-codegen/pkg/middleware"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -55,6 +56,8 @@ func init() {
 type Deps struct {
 	// Server answers on /server, apart from the owner's checks. Nil answers 501.
 	Server http.Handler
+	// Tokens is where the assistants' tokens live.
+	Tokens *service.Store
 }
 
 func isInternal(c echo.Context) bool {
@@ -136,7 +139,7 @@ func InitV2Router(deps Deps) http.Handler {
 		Options: openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc},
 	}))
 
-	codegen.RegisterHandlersWithBaseURL(e, v2Route.NewMCP(), V2APIPath)
+	codegen.RegisterHandlersWithBaseURL(e, v2Route.NewMCP(deps.Tokens), V2APIPath)
 
 	mcp := server(deps.Server)
 

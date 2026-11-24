@@ -22,6 +22,7 @@ import (
 	"github.com/ReCasaOS/ReCasaOS-MCP/common"
 	"github.com/ReCasaOS/ReCasaOS-MCP/pkg/config"
 	"github.com/ReCasaOS/ReCasaOS-MCP/route"
+	"github.com/ReCasaOS/ReCasaOS-MCP/service"
 	"github.com/coreos/go-systemd/daemon"
 	"go.uber.org/zap"
 
@@ -97,9 +98,21 @@ func main() {
 		}
 	}
 
+	if err := os.MkdirAll(config.AppInfo.StatePath, 0o700); err != nil {
+		panic(err)
+	}
+
+	tokens, err := service.OpenStore(filepath.Join(config.AppInfo.StatePath, "tokens.json"))
+	if err != nil {
+		panic(err)
+	}
+	if tokens.SetAside() {
+		logger.Error("tokens.json could not be read: it was set aside as tokens.json.bad and no token exists now")
+	}
+
 	mux := &util_http.HandlerMultiplexer{
 		HandlerMap: map[string]http.Handler{
-			"v2":  route.InitV2Router(route.Deps{}),
+			"v2":  route.InitV2Router(route.Deps{Tokens: tokens}),
 			"doc": route.InitV2DocRouter(_docHTML, _docYAML),
 		},
 	}

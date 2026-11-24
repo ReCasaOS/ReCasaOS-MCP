@@ -30,6 +30,68 @@ paths:
         "503":
           $ref: "#/components/responses/Error"
 
+  /tokens:
+    get:
+      summary: The tokens that let an assistant in, without their secret values
+      operationId: listTokens
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Token"
+        "403":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+    post:
+      summary: Create a token for the calling account; its value is shown this once
+      operationId: createToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewToken"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedToken"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /tokens/{id}:
+    delete:
+      summary: Revoke a token
+      operationId: deleteToken
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
 components:
   responses:
     Error:
@@ -77,3 +139,54 @@ components:
           type: integer
         danger:
           type: integer
+
+    Level:
+      type: string
+      enum: [read, full]
+      description: "`read` only reads; `full` may also act on the box"
+
+    NewToken:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: 1 to 60 printable characters
+          example: laptop
+        level:
+          allOf:
+            - $ref: "#/components/schemas/Level"
+          description: Absent means `read`
+
+    Token:
+      type: object
+      required: [id, name, account, level, created, last_used]
+      properties:
+        id:
+          type: string
+          example: 3fa91c0e
+        name:
+          type: string
+        account:
+          type: integer
+          description: The account that created it
+        level:
+          $ref: "#/components/schemas/Level"
+        created:
+          type: string
+          format: date-time
+        last_used:
+          type: string
+          format: date-time
+          description: The zero time when never used
+
+    CreatedToken:
+      allOf:
+        - $ref: "#/components/schemas/Token"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The secret value, shown only here
