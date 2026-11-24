@@ -67,14 +67,14 @@ func TestLookup(t *testing.T) {
 	if got, ok := s.Lookup(other); !ok || got.Name != "b" {
 		t.Fatalf("the other token: %+v %v", got, ok)
 	}
-	if _, ok := s.Delete(tok.ID); !ok {
-		t.Fatal("Delete found nothing")
+	if _, err := s.Delete(tok.ID); err != nil {
+		t.Fatal(err)
 	}
 	if _, ok := s.Lookup(plain); ok {
 		t.Fatal("a deleted token still works")
 	}
-	if _, ok := s.Delete(tok.ID); ok {
-		t.Fatal("second Delete found it again")
+	if _, err := s.Delete(tok.ID); err != ErrNotFound {
+		t.Fatalf("second Delete: %v, want ErrNotFound", err)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestAccountHasTokens(t *testing.T) {
 	if !s.AccountHasTokens(2) || s.AccountHasTokens(3) {
 		t.Fatal("AccountHasTokens is wrong")
 	}
-	s.Delete(tok.ID)
+	_, _ = s.Delete(tok.ID)
 	if s.AccountHasTokens(2) {
 		t.Fatal("still has tokens after Delete")
 	}
@@ -163,7 +163,7 @@ func TestFileIsPrivateAndWhole(t *testing.T) {
 		ids = append(ids, tok.ID)
 		s.Lookup(plain)
 	}
-	s.Delete(ids[0])
+	_, _ = s.Delete(ids[0])
 
 	if runtime.GOOS != "windows" {
 		info, err := os.Stat(path)
@@ -176,7 +176,7 @@ func TestFileIsPrivateAndWhole(t *testing.T) {
 		t.Fatalf("left beside the file: %v", entries)
 	}
 	reopened, err := OpenStore(path)
-	if err != nil || len(reopened.List()) != 2 || reopened.SetAside() {
+	if err != nil || len(reopened.List()) != 2 || len(reopened.Notes()) != 0 {
 		t.Fatalf("reopen: %v, %d tokens", err, len(reopened.List()))
 	}
 }
@@ -195,8 +195,8 @@ func TestUnreadableFileIsSetAside(t *testing.T) {
 			t.Fatal(err)
 		}
 		s, err := OpenStore(path)
-		if err != nil || len(s.List()) != 0 || !s.SetAside() {
-			t.Fatalf("%s: %v, %d tokens, set aside %v", name, err, len(s.List()), s.SetAside())
+		if err != nil || len(s.List()) != 0 || len(s.Notes()) != 1 {
+			t.Fatalf("%s: %v, %d tokens, notes %v", name, err, len(s.List()), s.Notes())
 		}
 		if got, _ := os.ReadFile(path + ".bad"); string(got) != content {
 			t.Errorf("%s: .bad holds %q", name, got)
@@ -212,7 +212,7 @@ func TestUnreadableFileIsSetAside(t *testing.T) {
 
 func TestMissingFileIsAnEmptyStore(t *testing.T) {
 	s, path := open(t)
-	if len(s.List()) != 0 || s.SetAside() {
+	if len(s.List()) != 0 || len(s.Notes()) != 0 {
 		t.Fatal("not empty")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -232,7 +232,7 @@ func TestConcurrentUse(t *testing.T) {
 			for j := 0; j < 20; j++ {
 				s.Lookup(plain)
 				if _, tok, err := s.Create("n", 2, LevelFull); err == nil {
-					s.Delete(tok.ID)
+					_, _ = s.Delete(tok.ID)
 				}
 				s.List()
 				s.AccountHasTokens(2)
@@ -242,5 +242,33 @@ func TestConcurrentUse(t *testing.T) {
 	wg.Wait()
 	if _, ok := s.Lookup(plain); !ok {
 		t.Fatal("the fixed token was lost")
+	}
+}
+
+func TestDeleteThatCannotBeSavedKeepsTheToken(t *testing.T) {
+	s, path := open(t)
+	plain, tok, _ := s.Create("a", 1, LevelRead)
+
+	s.path = filepath.Join(filepath.Dir(path), "gone", "tokens.json") // no directory: no temp file
+	if _, err := s.Delete(tok.ID); err == nil || err == ErrNotFound {
+		t.Fatalf("Delete = %v, want the save's error", err)
+	}
+	if _, ok := s.Lookup(plain); !ok || len(s.List()) != 1 {
+		t.Fatal("the token is gone though the revocation was not saved")
+	}
+}
+
+func TestUnreadableFileThatCannotBeSetAside(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+	if err := os.Mkdir(path, 0o700); err != nil { // reading a directory fails
+		t.Fatal(err)
+	}
+	s, err := OpenStore(path)
+	if err != nil || len(s.List()) != 0 || len(s.Notes()) != 1 {
+		t.Fatalf("OpenStore: %v, %d tokens, notes %v", err, len(s.List()), s.Notes())
+	}
+	if _, err := os.Stat(path + ".bad"); err != nil && !strings.Contains(s.Notes()[0], "could not be set aside") {
+		t.Fatalf("neither set aside nor said so: %v", s.Notes())
 	}
 }

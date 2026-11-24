@@ -106,8 +106,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if tokens.SetAside() {
-		logger.Error("tokens.json could not be read: it was set aside as tokens.json.bad and no token exists now")
+	for _, note := range tokens.Notes() {
+		logger.Error(note)
 	}
 
 	mux := &util_http.HandlerMultiplexer{

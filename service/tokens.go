@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,7 @@ var (
 	ErrTooMany  = errors.New("too many tokens: revoke one first")
 	ErrBadName  = errors.New("a token's name is 1 to 60 printable characters")
 	ErrBadLevel = errors.New("a token's level is read or full")
+	ErrNotFound = errors.New("no such token")
 )
 
 // Token is what leaves the store. The hash of the plain value never does.
@@ -64,11 +66,12 @@ type Store struct {
 	now         func() time.Time
 	entries     []entry
 	lastWritten time.Time // of the last write made for a use, not for a Create or Delete
-	setAside    bool
+	notes       []string
 }
 
-// OpenStore reads the file at path. A file that cannot be read as a token list is renamed to
-// path+".bad" and the store starts empty, so a damaged file never stops the module.
+// OpenStore reads the file at path. A file that cannot be read as a token list, for whatever
+// reason, is renamed to path+".bad" and the store starts empty, so a damaged file never stops
+// the module. What happened is in Notes. Only a missing file is silent.
 func OpenStore(path string) (*Store, error) {
 	s := &Store{path: path, now: time.Now}
 
@@ -76,28 +79,31 @@ func OpenStore(path string) (*Store, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
 	}
-	if err != nil {
-		return nil, err
-	}
 
 	var f file
-	if json.Unmarshal(raw, &f) != nil || f.Version != fileVersion {
-		// Windows will not rename over a file
-		_ = os.Remove(path + ".bad")
-		if err := os.Rename(path, path+".bad"); err != nil {
-			return nil, err
+	if err == nil {
+		if err = json.Unmarshal(raw, &f); err == nil && f.Version != fileVersion {
+			err = fmt.Errorf("unknown version %d", f.Version)
 		}
-		s.setAside = true
-
+	}
+	if err == nil {
+		s.entries = f.Tokens
 		return s, nil
 	}
-	s.entries = f.Tokens
+
+	// Windows will not rename over a file
+	_ = os.Remove(path + ".bad")
+	if renameErr := os.Rename(path, path+".bad"); renameErr != nil {
+		s.notes = append(s.notes, fmt.Sprintf("%s could not be read (%v) and could not be set aside (%v): it will be replaced at the next change", path, err, renameErr))
+	} else {
+		s.notes = append(s.notes, fmt.Sprintf("%s could not be read (%v): it was set aside as %s.bad and no token exists now", path, err, path))
+	}
 
 	return s, nil
 }
 
-// SetAside tells whether OpenStore found a damaged file and moved it to tokens.json.bad.
-func (s *Store) SetAside() bool { return s.setAside }
+// Notes are what OpenStore found wrong with the file, one line each, for the log.
+func (s *Store) Notes() []string { return s.notes }
 
 func hash(plain string) string {
 	sum := sha256.Sum256([]byte(plain))
@@ -180,24 +186,25 @@ func (s *Store) List() []Token {
 	return tokens
 }
 
-func (s *Store) Delete(id string) (t Token, ok bool) {
+// Delete revokes a token. If the file cannot be written the token stays, in memory as on
+// disk, and the error says so.
+func (s *Store) Delete(id string) (Token, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	i := s.index(id)
 	if i < 0 {
-		return Token{}, false
+		return Token{}, ErrNotFound
 	}
 
 	previous := s.entries
 	s.entries = append(append([]entry{}, previous[:i]...), previous[i+1:]...)
 	if err := s.save(); err != nil {
-		// memory and file stay alike: the token is still there, and still works
 		s.entries = previous
-		return Token{}, false
+		return Token{}, err
 	}
 
-	return previous[i].Token, true
+	return previous[i].Token, nil
 }
 
 // Lookup finds the token a plain value belongs to and notes its use. It hashes the value once

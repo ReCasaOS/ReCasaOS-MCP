@@ -257,3 +257,26 @@ func TestDeleteToken(t *testing.T) {
 		t.Fatal("the token is still stored")
 	}
 }
+
+func TestDeleteThatCannotBeSavedIs500(t *testing.T) {
+	token := box(t, "admin", true)
+	dir := t.TempDir()
+	tokens, err := service.OpenStore(filepath.Join(dir, "tokens.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := Deps{Tokens: tokens}
+	_, body := send(d, http.MethodPost, "/v2/mcp/tokens", token, `{"name":"laptop"}`)
+	id := decode(t, body)["id"].(string)
+
+	// the state directory goes away: nothing can be written any more
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := answer(d, http.MethodDelete, "/v2/mcp/tokens/"+id, token); code != http.StatusInternalServerError || !strings.Contains(body, "still works") {
+		t.Fatalf("%d: %s, want 500", code, body)
+	}
+	if code, _ := answer(d, http.MethodDelete, "/v2/mcp/tokens/00000000", token); code != http.StatusNotFound {
+		t.Fatalf("unknown id: %d, want 404", code)
+	}
+}

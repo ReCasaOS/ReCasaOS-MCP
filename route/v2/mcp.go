@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ReCasaOS/CasaOS-Common/utils/logger"
 	"github.com/ReCasaOS/ReCasaOS-MCP/codegen"
 	"github.com/ReCasaOS/ReCasaOS-MCP/common"
 	"github.com/ReCasaOS/ReCasaOS-MCP/service"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // Endpoint is the path an assistant connects to.
@@ -79,8 +81,12 @@ func (m *MCP) CreateToken(ctx echo.Context) error {
 }
 
 func (m *MCP) DeleteToken(ctx echo.Context, id string) error {
-	if _, ok := m.tokens.Delete(id); !ok {
-		return message(ctx, http.StatusNotFound, "no such token")
+	switch _, err := m.tokens.Delete(id); {
+	case errors.Is(err, service.ErrNotFound):
+		return message(ctx, http.StatusNotFound, err.Error())
+	case err != nil:
+		logger.Error("a token could not be revoked: the file cannot be written", zap.String("id", id), zap.Error(err))
+		return message(ctx, http.StatusInternalServerError, "the revocation could not be saved: the token still works")
 	}
 
 	return ctx.NoContent(http.StatusNoContent)
