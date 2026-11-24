@@ -205,3 +205,18 @@ func TestBoxRereadsTheGatewayWhenItCannotConnect(t *testing.T) {
 		t.Fatalf("%+v %v hits %d", rep, err, hits.Load())
 	}
 }
+
+func TestBoxDoUpToUsesItsOwnLimit(t *testing.T) {
+	b := boxFor(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(strings.Repeat("a", 300<<10)))
+	}))
+	rep, err := b.DoUpTo(context.Background(), 7, "GET", "/v2/x", nil, nil, 1<<20)
+	if err != nil || len(rep.Body) != 300<<10 || rep.Truncated {
+		t.Fatalf("1 MiB limit: len %d truncated %v err %v", len(rep.Body), rep.Truncated, err)
+	}
+	rep, err = b.DoUpTo(context.Background(), 7, "GET", "/v2/x", nil, nil, 100)
+	if err != nil || len(rep.Body) != 100 || !rep.Truncated {
+		t.Fatalf("100 byte limit: len %d truncated %v err %v", len(rep.Body), rep.Truncated, err)
+	}
+}

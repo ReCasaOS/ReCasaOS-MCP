@@ -9,6 +9,7 @@ require (
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/labstack/echo-jwt/v4 v4.4.0
 	github.com/labstack/echo/v4 v4.16.1
+	github.com/oasdiff/yaml3 v0.0.14
 	go.uber.org/zap v1.28.0
 	gopkg.in/ini.v1 v1.67.3
 )
@@ -38,7 +39,6 @@ require (
 	github.com/minio/minlz v1.0.1 // indirect
 	github.com/nwaples/rardecode/v2 v2.2.0 // indirect
 	github.com/oasdiff/yaml v0.1.1 // indirect
-	github.com/oasdiff/yaml3 v0.0.14 // indirect
 	github.com/orca-zhang/ecache v1.1.3 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/samber/lo v1.38.1 // indirect

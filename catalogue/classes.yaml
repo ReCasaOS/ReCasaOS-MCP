@@ -1,0 +1,24 @@
+# What each API action of the box may do for an AI client. One line per action:
+#   "METHOD /full/path/{param}": class # what the action does, in a few words
+# Classes: read (only looks), secret (reads something private), change (alters
+# the box), danger (can lose data or lock someone out), never (no client ever
+# gets it). An action that is not listed here is not offered at all.
+
+# The module's own routes and the internal one: never reachable through the module.
+"POST /v2/mcp/server": never # the module's own server
+"GET /v2/mcp/status": never # the module's own status
+"GET /v2/mcp/tokens": never # lists the tokens
+"POST /v2/mcp/tokens": never # creates a token
+"DELETE /v2/mcp/tokens/{id}": never # revokes a token
+"POST /v1/users/internal/access-token": never # internal: mints an access token
+
+"GET /v2/casaos/health/services": read # state of the box's services
+"GET /v2/casaos/health/ports": read # ports in use
+"GET /v2/app_management/web/appgrid": read # the dashboard's apps
+"GET /v2/app_management/apps": read # the apps of the store
+"GET /v2/app_management/categories": read # the store's categories
+"GET /v2/app_management/global": read # global settings of apps
+"GET /v2/local_storage/merge": read # merged storage pools
+"GET /v2/local_storage/mount": read # mounted storages
+"GET /v2/vuln_scan/status": read # state of the vulnerability scan
+"POST /v2/vuln_scan/scan": change # starts a vulnerability scan

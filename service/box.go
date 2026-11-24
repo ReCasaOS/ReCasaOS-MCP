@@ -61,6 +61,11 @@ func (b *Box) baseURL(reread bool) (*url.URL, error) {
 
 // Do sends one request; path is the escaped path and starts with "/".
 func (b *Box) Do(ctx context.Context, account int, method, path string, query url.Values, body []byte) (Reply, error) {
+	return b.DoUpTo(ctx, account, method, path, query, body, maxReply)
+}
+
+// DoUpTo is Do with its own limit on the reply's size.
+func (b *Box) DoUpTo(ctx context.Context, account int, method, path string, query url.Values, body []byte, limit int) (Reply, error) {
 	if !strings.HasPrefix(path, "/") {
 		return Reply{}, errors.New("the path must start with /")
 	}
@@ -71,17 +76,17 @@ func (b *Box) Do(ctx context.Context, account int, method, path string, query ur
 	ctx, cancel := context.WithTimeout(ctx, b.timeout)
 	defer cancel()
 
-	rep, err := b.once(ctx, account, method, path, plain, query, body)
+	rep, err := b.once(ctx, account, method, path, plain, query, body, limit)
 	if err == nil && rep.Status == http.StatusUnauthorized {
 		b.identity.Forget(account)
-		return b.once(ctx, account, method, path, plain, query, body)
+		return b.once(ctx, account, method, path, plain, query, body, limit)
 	}
 	return rep, err
 }
 
 // once gets a token, sends the request, and reads the gateway's address again
 // when it could not connect (the owner may have changed the port).
-func (b *Box) once(ctx context.Context, account int, method, path, plain string, query url.Values, body []byte) (Reply, error) {
+func (b *Box) once(ctx context.Context, account int, method, path, plain string, query url.Values, body []byte, limit int) (Reply, error) {
 	token, err := b.identity.AccessToken(ctx, account)
 	if err != nil {
 		return Reply{}, err
@@ -90,18 +95,18 @@ func (b *Box) once(ctx context.Context, account int, method, path, plain string,
 	if err != nil {
 		return Reply{}, err
 	}
-	rep, err := b.send(ctx, base, token, method, path, plain, query, body)
+	rep, err := b.send(ctx, base, token, method, path, plain, query, body, limit)
 	var opErr *net.OpError
 	if errors.As(err, &opErr) && opErr.Op == "dial" {
 		if base, err = b.baseURL(true); err != nil {
 			return Reply{}, err
 		}
-		rep, err = b.send(ctx, base, token, method, path, plain, query, body)
+		rep, err = b.send(ctx, base, token, method, path, plain, query, body, limit)
 	}
 	return rep, err
 }
 
-func (b *Box) send(ctx context.Context, base *url.URL, token, method, path, plain string, query url.Values, body []byte) (Reply, error) {
+func (b *Box) send(ctx context.Context, base *url.URL, token, method, path, plain string, query url.Values, body []byte, limit int) (Reply, error) {
 	u := *base
 	u.Path, u.RawPath, u.RawQuery = plain, path, query.Encode()
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), bytes.NewReader(body))
@@ -119,13 +124,13 @@ func (b *Box) send(ctx context.Context, base *url.URL, token, method, path, plai
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxReply+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
 	if err != nil {
 		return Reply{}, err
 	}
 	rep := Reply{Status: resp.StatusCode, ContentType: resp.Header.Get("Content-Type"), Body: data}
-	if len(data) > maxReply {
-		rep.Body, rep.Truncated = data[:maxReply], true
+	if len(data) > limit {
+		rep.Body, rep.Truncated = data[:limit], true
 	}
 	if len(rep.Body) > 0 && isBinary(rep.ContentType, rep.Body) {
 		return Reply{}, ErrBinaryReply
