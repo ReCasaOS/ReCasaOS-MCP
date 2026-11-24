@@ -1,93 +1,156 @@
 # ReCasaOS-MCP
 
-An optional module of [ReCasaOS](https://github.com/ReCasaOS) that puts an MCP endpoint
-behind the box's Gateway. An AI assistant connects with a token the owner creates, at one of
-two levels, `read` or `full`. Every call is made as the owner's account, through the Gateway.
-Each action of the box's API carries a class in `catalogue/classes.yaml`; an action without a
-class is not offered.
+An optional module of [ReCasaOS](https://github.com/ReCasaOS) that lets an AI assistant you
+choose read and manage your box.
 
-## Status
+It puts an [MCP](https://modelcontextprotocol.io) endpoint behind the box's Gateway. An
+assistant running on a computer of the same network connects to it with a token you create
+in the dashboard. Nothing runs on the box but this endpoint: no model, no key, no account
+with anyone. The box only answers the assistant you plugged in.
 
-Offered by ReCasaOS from v0.5.192, in the core tier, on the Modules page or with
-`casaos module install mcp`. It needs CasaOS-Gateway v0.4.40 and CasaOS-UserService
-v0.4.39, which that release carries.
+Once it is connected you can ask things like "which of my apps have an update waiting?",
+"start a backup of Nextcloud to the NAS", "why is Immich unhealthy?" or "stop the Windows
+virtual machine".
 
-## Routes
+## Install
 
-Under `/v2/mcp`:
+On a box running ReCasaOS v0.5.192 or later:
 
-- `POST /server`: the MCP endpoint, with a bearer token. It is not a REST route and is not
-  in the OpenAPI file.
-- The owner's routes, described in `api/mcp/openapi.yaml`: `GET /status` (it also gives the endpoint's address on the local network),
-  `GET|POST /tokens`, `DELETE /tokens/{id}`.
+- in the dashboard, **Modules**, then *AI access (MCP)*, **Install**; or
+- on the box, `sudo casaos module install mcp`.
 
-## Connecting an assistant
+It needs no package and takes about 14 MB. `sudo casaos module remove mcp` takes it away;
+the tokens stay in `/var/lib/casaos-mcp/` until you delete that folder.
 
-    claude mcp add --transport http <name> http://<box>/v2/mcp/server --header "Authorization: Bearer <token>"
+## Create a token
 
-It works for an assistant running on a computer of the same network.
+The owner's dashboard gains an **AI access** card. *New token* asks for a name and a level:
 
-## The tools
+| Level | What the assistant can do |
+|---|---|
+| **Read only** (the default) | Look: the apps and their state, the backups and their history, the virtual machines, statistics, health. Nothing that can carry a secret, nothing that changes the box. |
+| **Everything** | Also read what can carry a secret (an app's compose file, a destination's settings), change things (install, start, stop, back up, configure) and delete things. |
 
-- `search_actions`: find an action of the box.
-- `describe_action`: how to call it.
-- `read`: run an action that only looks.
-- `change`: run an action that alters the box (full token only).
-- `destroy`: run an action that can lose data (full token only).
+A token with *Everything* has the owner's full power over the box. A stolen token, or an
+assistant misled by a booby-trapped text (a web page, a log line, an app's name), can erase
+data. Give it only to an assistant you trust with that.
 
-## Files on the box
+The token is shown once, with the command to give the assistant. The card lists the tokens
+with their last use, and revokes one at any time: a revoked token is refused at the very
+next call.
 
-- `/var/lib/casaos-mcp/tokens.json`: the tokens, as hashes only.
-- `/var/log/casaos/mcp-calls.log`: one line per tool call: time, token id and name, tool,
-  action, status. Never a value.
-- The module's general log, with the other ReCasaOS services.
+## Connect an assistant
+
+The card gives the command ready to paste, with the box's address on your network. For
+Claude Code:
+
+    claude mcp add --transport http recasaos http://<box>/v2/mcp/server --header "Authorization: Bearer <token>"
+
+For another assistant that speaks MCP over HTTP, give it the URL `http://<box>/v2/mcp/server`
+and the header `Authorization: Bearer <token>`.
+
+The assistant must run on a computer that reaches the box on your local network (or through
+your own VPN). Assistants that connect from their vendor's cloud cannot reach it.
+
+## What the assistant gets
+
+Five tools, whatever the number of actions behind them:
+
+| Tool | Does | Level |
+|---|---|---|
+| `search_actions` | finds actions of the box by words | both |
+| `describe_action` | says how to call one: its parameters, its body | both |
+| `read` | runs an action that only looks | both |
+| `change` | runs an action that alters the box | Everything |
+| `destroy` | runs an action that can lose data | Everything |
+
+The assistant names an action and its parameters, never a URL: the module builds the call
+from the box's own API descriptions. `destroy` is a tool of its own so that an assistant can
+ask you before using it. Whether it does depends on the assistant and on how you set it up.
+
+Every call is made as the owner's account, through the Gateway, like a call of the
+dashboard: the box's own rules judge it.
+
+## What is offered, and what is not
+
+Each action of the box's API carries a class in [`catalogue/classes.yaml`](catalogue/classes.yaml),
+written after reading what the action does and what it answers. **An action without a class
+is not offered at all.** Today 186 actions are classed:
+
+| Class | Count | Meaning | Who gets it |
+|---|---|---|---|
+| `read` | 58 | only looks, and answers with nothing private | every token |
+| `secret` | 22 | reads something that can carry a secret | Everything |
+| `change` | 61 | alters the box | Everything |
+| `danger` | 29 | can lose data or lock someone out | Everything, through `destroy` |
+| `never` | 16 | not offered to any assistant | nobody |
+
+- **Offered:** the apps and their store, updates, logs and statistics; the backups, their
+  schedules and destinations; the virtual machines; merged storage and mounts; the
+  vulnerability scan.
+- **Not offered yet:** the older routes of the system, the drives, the shares, the accounts,
+  Files and the fleet (205 routes, listed in [`catalogue/uncovered.txt`](catalogue/uncovered.txt)).
+  They come area by area.
+- **Never offered:** passwords, two-factor settings, the creation or deletion of accounts,
+  cloud sign-ins, uploads and downloads of files, live streams, consoles and terminals, and
+  the module's own tokens.
+
+## What is kept
+
+- `/var/log/casaos/mcp-calls.log`: one line per call an assistant made: the time, the token,
+  the tool, the action and the result. Never a parameter, a body or a token.
+- `/var/lib/casaos-mcp/tokens.json`: the tokens, as hashes. A token's value exists only on
+  the screen where it was created and wherever you pasted it.
+- Bad tokens presented to the endpoint are noted in the module's log, with the address they
+  came from.
 
 ## Limits
 
-- Same network only.
-- A Gateway that serves HTTPS only on its main port, or that is bound to an address other
-  than the loopback or all addresses, is not supported yet.
-- Uploads, downloads, streams and consoles are not offered.
-- The list of actions is loaded at the first tool call, so the status route shows no action
+- The same network only: no access through ReCasaOS's remote access yet.
+- A Gateway whose main port serves HTTPS only, or that listens on one particular address, is
+  not supported yet.
+- Sending and fetching files, live streams and consoles are not offered.
+- A box with several networks gives the address of its main one in the command.
+- The list of actions is loaded when an assistant first connects, so the card shows none
   before that.
-- Whether the assistant asks before a change or a deletion depends on the assistant.
 
-## Tests
+## Development
+
+The module is a Go service, `casaos-mcp`, built like the other ReCasaOS modules: it listens
+on the loopback, registers `/v2/mcp` with the Gateway, and ships as two archives
+(amd64, arm64) that hold the binary, its unit and a sample configuration.
 
     go generate ./...
     go test ./...
 
-To refresh `testdata/` (the box's API descriptions and route list):
+Routes, under `/v2/mcp`:
 
-    scripts/refresh-testdata.sh <workspace root>
+- `POST /server`: the MCP endpoint (bearer token; stateless, JSON answers).
+- For the owner, described in [`api/mcp/openapi.yaml`](api/mcp/openapi.yaml): `GET /status`,
+  `GET` and `POST /tokens`, `DELETE /tokens/{id}`.
 
-## What has been seen working
+When the box's API changes:
 
-First proof on a real stack, 2026-11-24, in a Linux container: the real Gateway, accounts
-service, message bus and core, with this module built from `bee7b42`.
+    scripts/refresh-testdata.sh <folder that holds the ReCasaOS repositories>
 
-Seen:
+refreshes the copies of the API descriptions under `testdata/`. The tests then fail for
+every new action until it has a line in `catalogue/classes.yaml`, and for every route that
+is neither described nor listed in `catalogue/uncovered.txt`. The rules for choosing a class
+are at the top of the classes file; `TestClassCounts` holds the totals, so that a change of
+class is always a visible edit.
 
-- The tests of the module, of the accounts service's internal route and of the Gateway's
-  route table pass on Linux with the race detector; the snapshot release builds both archives.
-- The administrator creates a read token and a full token and revokes one; a revoked token
-  gets 401 at once; the list of tokens never shows a token's value.
-- Without a token the MCP endpoint answers 401 with `WWW-Authenticate: Bearer`; a foreign
-  `Origin` gets 403; after 10 bad tokens from one address the 11th gets 429 (only one
-  client address was tried).
-- The accounts service's internal route refuses a request made from another machine of the network.
-- A real MCP client connects over plain HTTP on the LAN with the token in a header, sees only
-  `search_actions`, `describe_action` and `read` with a read token, finds and runs a read
-  action, and runs a `change` action with a full token once that tool is allowed.
-- The journal `/var/log/casaos/mcp-calls.log` (mode 0600) holds one line per tool call and
-  no token, parameter value or body; no password, internal secret or token was found in
-  the module's logs or in the tool results that were saved.
-- The module stops within a tenth of a second on SIGTERM with a listening stream open.
+A release is a tag `v<number>.<number>.<number>` on `main`; the installer's catalogue then
+pins that tag and its commit.
 
-Not seen yet:
+## Tested
 
-- Installing and removing an app, and whether a client asks before `destroy`.
-- The actions of app management, storage and virtual machines (only the core's and the
-  accounts service's actions were in the catalogue); the module under systemd on a box.
-- The token guard as it is now (a valid token always passes; bad ones are counted per
-  address) was tested on Linux with the race detector, not on the stack.
+- The unit tests run on Linux with the race detector, on every pull request.
+- On a full stack in a container (the real Gateway, accounts service, message bus and core)
+  with a real MCP client: tokens created and revoked, the three reading tools alone with a
+  read token, a read and a change run, a revoked token refused at once, the journal free of
+  any value.
+- On a real box by the maintainer, before the release that first offered it.
+
+## Licence
+
+Apache 2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE).
