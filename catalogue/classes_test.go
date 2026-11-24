@@ -162,6 +162,10 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 		"GET /v1/container/{id}",
 		"GET /v1/container/{id}/compose",
 		"GET /v2/app_management/backup/destinations/{name}/restic/password",
+		"GET /v2/app_management/backup/destinations/{name}/folders",
+		"GET /v2/app_management/backup/destinations/{name}/runs",
+		"GET /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}/files",
+		"GET /v2/app_management/git/{app}/tags",
 		"GET /v2/app_management/appstore",
 		"GET /v2/app_management/compose",
 		"GET /v2/app_management/compose/{id}",
@@ -193,7 +197,7 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 // A deliberate, visible edit is needed to change the class of any described action.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 63, catalogue.Secret: 18, catalogue.Change: 60, catalogue.Danger: 29, catalogue.Never: 16,
+		catalogue.Read: 58, catalogue.Secret: 22, catalogue.Change: 61, catalogue.Danger: 29, catalogue.Never: 16,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
@@ -214,5 +218,21 @@ func TestNoActingReadThroughACallerChosenHost(t *testing.T) {
 	const id = "GET /v2/app_management/web/frame-check"
 	if c := catalogue.Classes()[id]; c != catalogue.Change {
 		t.Errorf("%s makes the box call a host the caller chooses: class %q, want change", id, c)
+	}
+}
+
+func TestAReadThatContactsARemoteIsNotAPlainRead(t *testing.T) {
+	want := map[string]catalogue.Class{
+		"POST /v2/app_management/backup/destinations/{name}/check":                   catalogue.Change,
+		"GET /v2/app_management/backup/destinations/{name}/folders":                  catalogue.Secret,
+		"GET /v2/app_management/backup/destinations/{name}/runs":                     catalogue.Secret,
+		"GET /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}/files": catalogue.Secret,
+		"GET /v2/app_management/git/{app}/tags":                                      catalogue.Secret,
+	}
+	classes := catalogue.Classes()
+	for id, c := range want {
+		if classes[id] != c {
+			t.Errorf("%s is %q, want %q", id, classes[id], c)
+		}
 	}
 }

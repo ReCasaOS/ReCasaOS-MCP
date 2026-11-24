@@ -3,7 +3,7 @@
 # Classes: read (only looks), secret (reads something private), change (alters
 # the box), danger (can lose data or lock someone out), never (no client ever
 # gets it). An action that is not listed here is not offered at all.
-#   A read that makes the box send a request to a host the caller chooses is never "read".
+#   A read that makes the box contact another host is never "read": "change" if the caller chooses the host or the call probes on demand, "secret" if it browses a remote the owner configured.
 
 # The module's own routes and the internal one: never reachable through the module.
 "POST /v2/mcp/server": never # the module's own server
@@ -38,16 +38,16 @@
 "GET /v2/app_management/backup/destinations": read # the names of the backup destinations
 "DELETE /v2/app_management/backup/destinations/{name}": danger # forget a backup destination
 "PUT /v2/app_management/backup/destinations/{name}": danger # add or replace a backup destination and its credentials
-"POST /v2/app_management/backup/destinations/{name}/check": read # ask a destination whether it is reachable and its space
-"GET /v2/app_management/backup/destinations/{name}/folders": read # the folders under a path of a destination
+"POST /v2/app_management/backup/destinations/{name}/check": change # ask a destination whether it is reachable and its space (it contacts the destination)
+"GET /v2/app_management/backup/destinations/{name}/folders": secret # the folders under a path of a destination (the answer can quote the remote's error text)
 "DELETE /v2/app_management/backup/destinations/{name}/restic": change # send a destination's next backups back to rclone
 "GET /v2/app_management/backup/destinations/{name}/restic": read # whether a destination keeps its backups with restic
 "PUT /v2/app_management/backup/destinations/{name}/restic": change # switch a destination to restic, answering its repository password
 "POST /v2/app_management/backup/destinations/{name}/restic/check": change # start a check of a destination's restic repository
 "GET /v2/app_management/backup/destinations/{name}/restic/password": secret # the password of a destination's restic repository
-"GET /v2/app_management/backup/destinations/{name}/runs": read # the backups a destination holds
+"GET /v2/app_management/backup/destinations/{name}/runs": secret # the backups a destination holds (the answer can quote the remote's error text)
 "DELETE /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}": danger # delete one backup at a destination
-"GET /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}/files": read # list the files inside one backup
+"GET /v2/app_management/backup/destinations/{name}/runs/{app}/{stamp}/files": secret # list the files inside one backup (the answer can quote the remote's error text)
 "GET /v2/app_management/backup/exclusions": read # the folders no backup of an app copies
 "PUT /v2/app_management/backup/exclusions": change # replace the folders no backup of an app copies
 "POST /v2/app_management/backup/restore": danger # put an app or the box back from a backup
@@ -113,7 +113,7 @@
 "PUT /v2/app_management/git/{app}": change # change a git app's settings
 "POST /v2/app_management/git/{app}/check": change # fetch a git app's repository for new commits
 "POST /v2/app_management/git/{app}/deploy": change # deploy a git app
-"GET /v2/app_management/git/{app}/tags": read # the tags of a git app's repository
+"GET /v2/app_management/git/{app}/tags": secret # the tags of a git app's repository (it contacts the repository)
 "POST /v2/app_management/git/{app}/webhook": never # a git forge's webhook delivery
 "GET /v2/app_management/global": secret # the global app variables, API keys included
 "DELETE /v2/app_management/global/{key}": danger # remove a global app variable from every app
