@@ -73,9 +73,8 @@ Seen:
 - The administrator creates a read token and a full token and revokes one; a revoked token
   gets 401 at once; the list of tokens never shows a token's value.
 - Without a token the MCP endpoint answers 401 with `WWW-Authenticate: Bearer`; a foreign
-  `Origin` gets 403; after 10 bad tokens from one address the 11th gets 429, and a client
-  cannot get round it with `X-Forwarded-For`: the Gateway replaces that header with the
-  address of its own client (only one client address was tried).
+  `Origin` gets 403; after 10 bad tokens from one address the 11th gets 429 (only one
+  client address was tried).
 - The accounts service's internal route refuses a request made from another machine of the network.
 - A real MCP client connects over plain HTTP on the LAN with the token in a header, sees only
   `search_actions`, `describe_action` and `read` with a read token, finds and runs a read
@@ -91,4 +90,5 @@ Not seen yet:
 - Secrets of apps, backups and destinations kept out of read results (only the core's and
   the accounts service's actions were in the catalogue).
 - App management, storage, virtual machines; the module under systemd as root on a box.
-- The second fix of the token guard (a valid token is never refused because of other bad tokens from the same address) was tested on Linux with the race detector, not on the stack.
+- The token guard as it is now (a valid token always passes; bad ones are counted per
+  address) was tested on Linux with the race detector, not on the stack.
