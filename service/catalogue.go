@@ -82,11 +82,60 @@ func ParseActions(data []byte) ([]Action, error) {
 	for p, item := range doc.Paths.Map() {
 		for method, op := range item.Operations() {
 			full := base + p
-			out = append(out, Action{ID: method + " " + full, Method: method, Path: full, OperationID: op.OperationID, Summary: op.Summary, Operation: op})
+			id := method + " " + full
+			merged, err := mergeParameters(id, full, item.Parameters, op.Parameters)
+			if err != nil {
+				return nil, err
+			}
+			cp := *op // the document's operation is shared: never write to it
+			cp.Parameters = merged
+			out = append(out, Action{ID: id, Method: method, Path: full, OperationID: op.OperationID, Summary: op.Summary, Operation: &cp})
 		}
 	}
 	if len(out) == 0 {
 		return nil, errors.New("the description holds no operation")
+	}
+	return out, nil
+}
+
+// mergeParameters gives an operation the parameters of its path item first,
+// then its own; an own parameter with the same name and place replaces the
+// path item's in its position. It refuses an unresolved parameter and a path
+// placeholder that no path parameter declares: such an action cannot be called.
+func mergeParameters(id, path string, shared, own openapi3.Parameters) (openapi3.Parameters, error) {
+	var out openapi3.Parameters
+	for _, list := range []openapi3.Parameters{shared, own} {
+		for _, p := range list {
+			if p == nil || p.Value == nil {
+				return nil, fmt.Errorf("%s: a parameter is not resolved", id)
+			}
+			replaced := false
+			for i, q := range out {
+				if q.Value.Name == p.Value.Name && q.Value.In == p.Value.In {
+					out[i], replaced = p, true
+					break
+				}
+			}
+			if !replaced {
+				out = append(out, p)
+			}
+		}
+	}
+	for _, seg := range strings.Split(path, "/") {
+		if !strings.HasPrefix(seg, "{") || !strings.HasSuffix(seg, "}") {
+			continue
+		}
+		name := seg[1 : len(seg)-1]
+		if strings.ContainsAny(name, "{}") {
+			continue // a segment mixing text and placeholders: BuildRequest refuses the action
+		}
+		found := false
+		for _, p := range out {
+			found = found || (p.Value.In == "path" && p.Value.Name == name)
+		}
+		if !found {
+			return nil, fmt.Errorf("%s: the path parameter %q is not declared", id, name)
+		}
 	}
 	return out, nil
 }

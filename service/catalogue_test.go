@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -41,6 +43,9 @@ func spec(server string, ops ...string) string {
 		f := strings.Split(op, "|")
 		if _, ok := byPath[f[1]]; !ok {
 			order = append(order, f[1])
+			if i := strings.Index(f[1], "{"); i >= 0 { // declare the placeholder so ParseActions accepts it
+				byPath[f[1]] = fmt.Sprintf("    parameters:\n      - {name: %s, in: path, required: true, schema: {type: string}}\n", f[1][i+1:i+strings.Index(f[1][i:], "}")])
+			}
 		}
 		byPath[f[1]] += fmt.Sprintf("    %s:\n      summary: %q\n      operationId: %s\n      responses: {'200': {description: ok}}\n", strings.ToLower(f[0]), f[2], f[3])
 	}
@@ -252,5 +257,99 @@ func TestRefreshThroughARealBox(t *testing.T) {
 	}
 	if _, ok := c.Get("GET /v2/vuln_scan/status"); !ok {
 		t.Fatal("the action served by the gateway was not found")
+	}
+}
+
+const pathLevelSpec = `openapi: 3.0.3
+info: {title: t, version: '1'}
+servers: [{url: /v2/x}]
+components:
+  parameters:
+    ID: {name: id, in: path, required: true, schema: {type: string}}
+paths:
+  /things/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+      - {name: q, in: query, schema: {type: string}}
+    get:
+      operationId: getThing
+      responses: {'200': {description: ok}}
+    delete:
+      operationId: delThing
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: integer}}
+        - {name: extra, in: query, schema: {type: string}}
+      responses: {'200': {description: ok}}
+`
+
+func paramNames(a Action) string {
+	var s []string
+	for _, p := range a.Operation.Parameters {
+		s = append(s, p.Value.In+":"+p.Value.Name)
+	}
+	return strings.Join(s, ",")
+}
+
+func TestPathItemParametersReachEveryOperation(t *testing.T) {
+	as, err := ParseActions([]byte(pathLevelSpec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]Action{}
+	for _, a := range as {
+		got[a.Method] = a
+	}
+	if n := paramNames(got["GET"]); n != "path:id,query:q" {
+		t.Errorf("get: %s", n)
+	}
+	// the operation's own q wins but keeps the path item's position; extra is not seen by get
+	del := got["DELETE"]
+	if n := paramNames(del); n != "path:id,query:q,query:extra" {
+		t.Errorf("delete: %s", n)
+	}
+	if !del.Operation.Parameters[1].Value.Required {
+		t.Error("the operation's own q should win")
+	}
+}
+
+func TestAnUndeclaredPlaceholderRefusesTheDescription(t *testing.T) {
+	_, err := ParseActions([]byte(`openapi: 3.0.3
+info: {title: t, version: '1'}
+servers: [{url: /v2/x}]
+paths:
+  /a/{id}:
+    get:
+      operationId: o
+      responses: {'200': {description: ok}}
+`))
+	if err == nil || !strings.Contains(err.Error(), "GET /v2/x/a/{id}") {
+		t.Fatalf("want an error naming the action, got %v", err)
+	}
+}
+
+func TestEveryPlaceholderOfEveryRealActionIsDeclared(t *testing.T) {
+	files, _ := filepath.Glob("../testdata/specs/*.yaml")
+	if len(files) == 0 {
+		t.Fatal("no real description found")
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		as, err := ParseActions(data)
+		if err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+		for _, a := range as {
+			for _, seg := range strings.Split(a.Path, "/") {
+				if !strings.HasPrefix(seg, "{") {
+					continue
+				}
+				if !strings.Contains(","+paramNames(a)+",", ",path:"+strings.Trim(seg, "{}")+",") {
+					t.Errorf("%s: %s has no path parameter %s", f, a.ID, seg)
+				}
+			}
+		}
 	}
 }
