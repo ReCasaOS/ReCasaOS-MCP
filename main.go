@@ -20,6 +20,7 @@ import (
 	"github.com/ReCasaOS/CasaOS-Common/utils/file"
 	"github.com/ReCasaOS/CasaOS-Common/utils/logger"
 	"github.com/ReCasaOS/ReCasaOS-MCP/common"
+	"github.com/ReCasaOS/ReCasaOS-MCP/mcpserver"
 	"github.com/ReCasaOS/ReCasaOS-MCP/pkg/config"
 	"github.com/ReCasaOS/ReCasaOS-MCP/route"
 	"github.com/ReCasaOS/ReCasaOS-MCP/service"
@@ -110,9 +111,22 @@ func main() {
 		logger.Error(note)
 	}
 
+	// Nothing calls the box here: the catalogue is first read at the first tool call, with
+	// the account of the token that makes it.
+	identity := service.NewIdentity(config.CommonInfo.RuntimePath)
+	box := service.NewBox(config.CommonInfo.RuntimePath, service.DefaultGatewayINI, identity)
+	actions := service.NewCatalogue(box)
+	journal := service.NewJournal(filepath.Join(config.AppInfo.LogPath, "mcp-calls.log"))
+	defer journal.Close()
+
 	mux := &util_http.HandlerMultiplexer{
 		HandlerMap: map[string]http.Handler{
-			"v2":  route.InitV2Router(route.Deps{Tokens: tokens}),
+			"v2": route.InitV2Router(route.Deps{
+				Server:    mcpserver.Handler(mcpserver.Deps{Tokens: tokens, Catalogue: actions, Box: box, Journal: journal}),
+				Tokens:    tokens,
+				Catalogue: actions,
+				Identity:  identity,
+			}),
 			"doc": route.InitV2DocRouter(_docHTML, _docYAML),
 		},
 	}
@@ -130,10 +144,7 @@ func main() {
 		logger.Info("MCP service is listening...", zap.Any("address", listener.Addr().String()))
 	}
 
-	s := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second, // fix G112: Potential slowloris attack (see https://github.com/securego/gosec)
-	}
+	s := httpServer(ctx, mux)
 
 	go func() {
 		<-ctx.Done()
@@ -149,5 +160,15 @@ func main() {
 	err = s.Serve(listener) // not using http.serve() to fix G114: Use of net/http serve function that has no support for setting timeouts (see https://github.com/securego/gosec)
 	if err != nil && err != http.ErrServerClosed {
 		panic(err)
+	}
+}
+
+// httpServer serves h with request contexts that end with ctx, so that a request held open,
+// such as an AI client's subscriptions/listen, does not hold up the shutdown.
+func httpServer(ctx context.Context, h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second, // fix G112: Potential slowloris attack (see https://github.com/securego/gosec)
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
 }

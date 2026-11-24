@@ -54,6 +54,12 @@ type Catalogue struct {
 
 func NewCatalogue(box *Box) *Catalogue { return newCatalogue(box, catalogue.Classes()) }
 
+// NewCatalogueWithClasses is NewCatalogue with classes of the caller's own, for tests of
+// other packages.
+func NewCatalogueWithClasses(box *Box, classes map[string]catalogue.Class) *Catalogue {
+	return newCatalogue(box, classes)
+}
+
 func newCatalogue(src fetcher, classes map[string]catalogue.Class) *Catalogue {
 	return &Catalogue{src: src, classes: classes, cur: build(nil, nil)}
 }

@@ -67,7 +67,7 @@ func deps(t *testing.T) Deps {
 		t.Fatal(err)
 	}
 
-	return Deps{Tokens: tokens}
+	return Deps{Tokens: tokens, Catalogue: service.NewCatalogue(nil), Identity: service.NewIdentity(t.TempDir())}
 }
 
 func answer(deps Deps, method, path, authorization string) (int, string) {
@@ -265,7 +265,7 @@ func TestDeleteThatCannotBeSavedIs500(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := Deps{Tokens: tokens}
+	d := Deps{Tokens: tokens, Catalogue: service.NewCatalogue(nil), Identity: service.NewIdentity(t.TempDir())}
 	_, body := send(d, http.MethodPost, "/v2/mcp/tokens", token, `{"name":"laptop"}`)
 	id := decode(t, body)["id"].(string)
 

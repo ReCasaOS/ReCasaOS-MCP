@@ -52,12 +52,16 @@ func init() {
 	V2DocPath = "/doc" + V2APIPath
 }
 
-// Deps is what the routes are built on. Later tasks add their parts here.
+// Deps is what the routes are built on.
 type Deps struct {
 	// Server answers on /server, apart from the owner's checks. Nil answers 501.
 	Server http.Handler
 	// Tokens is where the assistants' tokens live.
 	Tokens *service.Store
+	// Catalogue is counted by the status.
+	Catalogue *service.Catalogue
+	// Identity forgets an account's access token when its last token is revoked.
+	Identity *service.Identity
 }
 
 func isInternal(c echo.Context) bool {
@@ -139,7 +143,7 @@ func InitV2Router(deps Deps) http.Handler {
 		Options: openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc},
 	}))
 
-	codegen.RegisterHandlersWithBaseURL(e, v2Route.NewMCP(deps.Tokens), V2APIPath)
+	codegen.RegisterHandlersWithBaseURL(e, v2Route.NewMCP(deps.Tokens, deps.Catalogue, deps.Identity), V2APIPath)
 
 	mcp := server(deps.Server)
 

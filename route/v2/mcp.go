@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/ReCasaOS/CasaOS-Common/utils/logger"
+	"github.com/ReCasaOS/ReCasaOS-MCP/catalogue"
 	"github.com/ReCasaOS/ReCasaOS-MCP/codegen"
 	"github.com/ReCasaOS/ReCasaOS-MCP/common"
 	"github.com/ReCasaOS/ReCasaOS-MCP/service"
@@ -17,11 +18,13 @@ import (
 const Endpoint = "/v2/mcp/server"
 
 type MCP struct {
-	tokens *service.Store
+	tokens    *service.Store
+	catalogue *service.Catalogue
+	identity  *service.Identity
 }
 
-func NewMCP(tokens *service.Store) codegen.ServerInterface {
-	return &MCP{tokens: tokens}
+func NewMCP(tokens *service.Store, catalogue *service.Catalogue, identity *service.Identity) codegen.ServerInterface {
+	return &MCP{tokens: tokens, catalogue: catalogue, identity: identity}
 }
 
 func message(ctx echo.Context, code int, text string) error {
@@ -32,9 +35,18 @@ func toAPI(t service.Token) codegen.Token {
 	return codegen.Token{Id: t.ID, Name: t.Name, Account: t.Account, Level: codegen.Level(t.Level), Created: t.Created, LastUsed: t.LastUsed}
 }
 
-// GetStatus has no actions and nothing unclassified yet: later tasks fill them in.
+// GetStatus counts the catalogue as last loaded: it is empty until the first tool call.
 func (m *MCP) GetStatus(ctx echo.Context) error {
-	return ctx.JSON(http.StatusOK, codegen.Status{Version: common.Version, Endpoint: Endpoint, Tokens: len(m.tokens.List())})
+	byClass, unclassified := m.catalogue.Counts()
+	return ctx.JSON(http.StatusOK, codegen.Status{
+		Version:  common.Version,
+		Endpoint: Endpoint,
+		Tokens:   len(m.tokens.List()),
+		Actions: codegen.ActionCounts{
+			Read: byClass[catalogue.Read], Secret: byClass[catalogue.Secret], Change: byClass[catalogue.Change], Danger: byClass[catalogue.Danger],
+		},
+		Unclassified: unclassified,
+	})
 }
 
 func (m *MCP) ListTokens(ctx echo.Context) error {
@@ -81,12 +93,18 @@ func (m *MCP) CreateToken(ctx echo.Context) error {
 }
 
 func (m *MCP) DeleteToken(ctx echo.Context, id string) error {
-	switch _, err := m.tokens.Delete(id); {
+	t, err := m.tokens.Delete(id)
+	switch {
 	case errors.Is(err, service.ErrNotFound):
 		return message(ctx, http.StatusNotFound, err.Error())
 	case err != nil:
 		logger.Error("a token could not be revoked: the file cannot be written", zap.String("id", id), zap.Error(err))
 		return message(ctx, http.StatusInternalServerError, "the revocation could not be saved: the token still works")
+	}
+
+	// the account's access token outlives no token of its own
+	if !m.tokens.AccountHasTokens(t.Account) {
+		m.identity.Forget(t.Account)
 	}
 
 	return ctx.NoContent(http.StatusNoContent)
