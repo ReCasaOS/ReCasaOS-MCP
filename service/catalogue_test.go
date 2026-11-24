@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -232,5 +233,24 @@ func TestAFullURLServerKeepsItsPathOnly(t *testing.T) {
 		map[string]catalogue.Class{"GET /v2/x/a": catalogue.Read})
 	if a, ok := c.Get("GET /v2/x/a"); !ok || a.Summary != "" {
 		t.Fatalf("%+v %v", a, ok)
+	}
+}
+
+// The path production takes: a real Box and a real HTTP Gateway serving YAML.
+func TestRefreshThroughARealBox(t *testing.T) {
+	gw := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != sourceB {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write([]byte(spec("/v2/vuln_scan", "GET|/status|Scan state|scanState")))
+	})
+	c := newCatalogue(boxFor(t, gw), map[string]catalogue.Class{"GET /v2/vuln_scan/status": catalogue.Read})
+	if err := c.Refresh(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.Get("GET /v2/vuln_scan/status"); !ok {
+		t.Fatal("the action served by the gateway was not found")
 	}
 }

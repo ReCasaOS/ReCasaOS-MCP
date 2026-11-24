@@ -147,5 +147,9 @@ func isBinary(contentType string, body []byte) bool {
 	if err != nil {
 		return true
 	}
-	return !(mt == "application/json" || strings.HasSuffix(mt, "+json") || strings.HasPrefix(mt, "text/"))
+	switch mt {
+	case "application/json", "application/yaml", "application/x-yaml":
+		return false
+	}
+	return !(strings.HasSuffix(mt, "+json") || strings.HasPrefix(mt, "text/"))
 }

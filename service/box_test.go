@@ -220,3 +220,39 @@ func TestBoxDoUpToUsesItsOwnLimit(t *testing.T) {
 		t.Fatalf("100 byte limit: len %d truncated %v err %v", len(rep.Body), rep.Truncated, err)
 	}
 }
+
+func TestBoxReadsYAMLAsText(t *testing.T) {
+	const body = "openapi: 3.0.3\ninfo: {title: t, version: '1'}\n"
+	for _, ct := range []string{"application/yaml", "application/x-yaml", "Application/YAML; charset=utf-8", "text/yaml"} {
+		b := boxFor(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", ct)
+			_, _ = w.Write([]byte(body))
+		}))
+		rep, err := b.DoUpTo(context.Background(), 7, "GET", "/doc/x.yaml", nil, nil, 1<<20)
+		if err != nil || string(rep.Body) != body {
+			t.Errorf("%s: body %q err %v", ct, rep.Body, err)
+		}
+	}
+}
+
+func TestBoxStillRefusesOctetStreamYAML(t *testing.T) {
+	b := boxFor(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte("openapi: 3.0.3\n"))
+	}))
+	if _, err := b.DoUpTo(context.Background(), 7, "GET", "/doc/x.yaml", nil, nil, 1<<20); !errors.Is(err, ErrBinaryReply) {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestBoxReadsYAMLServedWithoutAContentType(t *testing.T) {
+	const body = "openapi: 3.0.3\ninfo: {title: t, version: '1'}\n"
+	b := boxFor(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header()["Content-Type"] = nil // no header at all: Go's server sniffs
+		_, _ = w.Write([]byte(body))
+	}))
+	rep, err := b.DoUpTo(context.Background(), 7, "GET", "/doc/x.yaml", nil, nil, 1<<20)
+	if err != nil || string(rep.Body) != body {
+		t.Fatalf("body %q err %v", rep.Body, err)
+	}
+}
