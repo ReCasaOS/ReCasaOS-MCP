@@ -1,0 +1,198 @@
+openapi: 3.0.3
+
+info:
+  title: ReCasaOS MCP API
+  version: v2
+  description: |
+    Lets an AI assistant you choose read and manage this box, with a token you create.
+
+    Every route is for the administrator and the box's own services. The MCP endpoint itself, `/v2/mcp/server`, is not a REST route and is not described here.
+
+    For issues, please visit the [GitHub repository](https://github.com/ReCasaOS/ReCasaOS-MCP).
+
+servers:
+  - url: /v2/mcp
+
+paths:
+  /status:
+    get:
+      summary: The module's version, its endpoint, and what the assistants may do
+      operationId: getStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "403":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /tokens:
+    get:
+      summary: The tokens that let an assistant in, without their secret values
+      operationId: listTokens
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Token"
+        "403":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+    post:
+      summary: Create a token for the calling account; its value is shown this once
+      operationId: createToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewToken"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedToken"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /tokens/{id}:
+    delete:
+      summary: Revoke a token
+      operationId: deleteToken
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+components:
+  responses:
+    Error:
+      description: A message
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BaseResponse"
+
+  schemas:
+    BaseResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    Status:
+      type: object
+      required: [version, endpoint, actions, unclassified, tokens]
+      properties:
+        version:
+          type: string
+        endpoint:
+          type: string
+          description: The path an assistant connects to
+          example: /v2/mcp/server
+        lan_url:
+          type: string
+          description: The endpoint's address for a computer of the box's local network; absent when the box cannot tell
+          example: http://192.168.1.20/v2/mcp/server
+        actions:
+          $ref: "#/components/schemas/ActionCounts"
+        unclassified:
+          type: integer
+          description: How many actions of the box are not classified yet
+        tokens:
+          type: integer
+          description: How many tokens exist
+
+    ActionCounts:
+      type: object
+      required: [read, secret, change, danger]
+      properties:
+        read:
+          type: integer
+        secret:
+          type: integer
+        change:
+          type: integer
+        danger:
+          type: integer
+
+    Level:
+      type: string
+      enum: [read, full]
+      description: "`read` only reads; `full` may also act on the box"
+
+    NewToken:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: 1 to 60 printable characters
+          example: laptop
+        level:
+          allOf:
+            - $ref: "#/components/schemas/Level"
+          description: Absent means `read`
+
+    Token:
+      type: object
+      required: [id, name, account, level, created, last_used]
+      properties:
+        id:
+          type: string
+          example: 3fa91c0e
+        name:
+          type: string
+        account:
+          type: integer
+          description: The account that created it
+        level:
+          $ref: "#/components/schemas/Level"
+        created:
+          type: string
+          format: date-time
+        last_used:
+          type: string
+          format: date-time
+          description: The zero time when never used
+
+    CreatedToken:
+      allOf:
+        - $ref: "#/components/schemas/Token"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The secret value, shown only here

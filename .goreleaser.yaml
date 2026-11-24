@@ -1,0 +1,48 @@
+version: 2
+project_name: casaos-mcp
+before:
+  hooks:
+    - go generate
+    - go mod tidy
+builds:
+  - id: casaos-mcp
+    binary: build/sysroot/usr/bin/casaos-mcp
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -s
+      - -w
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+archives:
+  # the same names as the other components: linux-<arch>-casaos-mcp-v<version>.tar.gz
+  - name_template: >-
+      {{ .Os }}-{{ .Arch }}-{{ .ProjectName }}-v{{ .Version }}
+    id: casaos-mcp
+    ids:
+      - casaos-mcp
+    files:
+      - build/**/*
+      - module.json
+      - LICENSE
+      - NOTICE
+checksum:
+  name_template: "checksums.txt"
+snapshot:
+  version_template: "{{ incpatch .Version }}"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+release:
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "v{{ .Version }}"

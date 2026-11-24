@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "mcp",
+  "title": "AI access (MCP)",
+  "description": "Lets an AI assistant you choose read and manage this box, with a token you create. Works for assistants running on a computer of the same network.",
+  "component": "ReCasaOS-MCP",
+  "unit": "casaos-mcp.service",
+  "gateway_route": "/v2/mcp",
+  "packages": {
+    "common": [],
+    "amd64": [],
+    "arm64": []
+  },
+  "min_recasaos": "0.5.999",
+  "os": ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04"]
+}

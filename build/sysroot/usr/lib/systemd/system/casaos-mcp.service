@@ -1,0 +1,14 @@
+[Unit]
+After=casaos-gateway.service
+After=casaos-user-service.service
+Description=ReCasaOS MCP Service
+
+[Service]
+ExecStartPre=/usr/bin/casaos-mcp -v
+ExecStart=/usr/bin/casaos-mcp -c /etc/casaos/mcp.conf
+PIDFile=/var/run/casaos/mcp.pid
+Restart=always
+Type=notify
+
+[Install]
+WantedBy=multi-user.target
