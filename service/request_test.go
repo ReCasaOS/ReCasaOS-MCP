@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -388,6 +389,54 @@ func TestEveryRealActionCanBeDescribed(t *testing.T) {
 	t.Logf("%d actions, %d uncallable, largest description %d bytes (%s)", total, uncallable, biggest, biggestID)
 	if total == 0 {
 		t.Fatal("no action")
+	}
+}
+
+func describedSize(t *testing.T, a Action) (map[string]any, int) {
+	t.Helper()
+	d := DescribeAction(a)
+	raw, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d, len(raw)
+}
+
+func TestALargeActionWithoutJSONBodyIsDescribed(t *testing.T) {
+	a := inline(t, "/big", "    post:\n      operationId: big\n      description: "+strings.Repeat("x", 40<<10)+"\n"+`      requestBody:
+        content:
+          multipart/form-data: {schema: {type: object}}
+      responses: {'200': {description: ok}}
+`)[0]
+	d, n := describedSize(t, a)
+	if n > 32<<10 || d["callable"] != false {
+		t.Errorf("%d bytes, callable %v", n, d["callable"])
+	}
+}
+
+func TestALargeActionWithJSONBodyStaysUnderTheBound(t *testing.T) {
+	a := inline(t, "/big", "    post:\n      operationId: big\n      description: "+strings.Repeat("x", 40<<10)+"\n"+`      requestBody:
+        content:
+          application/json: {schema: {type: object}}
+      responses: {'200': {description: ok}}
+`)[0]
+	d, n := describedSize(t, a)
+	if n > 32<<10 || d["callable"] != true || d["action"] != a.ID {
+		t.Errorf("%d bytes, %v", n, d)
+	}
+}
+
+func TestManyLargeParametersStayUnderTheBound(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("    get:\n      operationId: many\n      parameters:\n")
+	for i := 0; i < 200; i++ {
+		b.WriteString("        - {name: p" + strconv.Itoa(i) + ", in: query, description: " + strings.Repeat("y", 1<<10) + ", schema: {type: string}}\n")
+	}
+	b.WriteString("      responses: {'200': {description: ok}}\n")
+	a := inline(t, "/many", b.String())[0]
+	d, n := describedSize(t, a)
+	if n > 32<<10 || d["action"] != a.ID || d["note"] == nil {
+		t.Errorf("%d bytes, note %v", n, d["note"])
 	}
 }
 

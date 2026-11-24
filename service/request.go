@@ -278,18 +278,41 @@ func DescribeAction(a Action) map[string]any {
 
 	if rb := op.RequestBody; rb != nil && rb.Value != nil {
 		body := map[string]any{"required": rb.Value.Required}
+		d["body"] = body
 		if mt := jsonMediaType(rb.Value); mt != nil {
 			body["schema"] = schemaMap(mt.Schema, 0, true, map[*openapi3.Schema]bool{})
-		}
-		d["body"] = body
-		if size(d) > maxDescription {
-			body["schema"] = schemaMap(jsonMediaType(rb.Value).Schema, 0, false, map[*openapi3.Schema]bool{})
-		}
-		if size(d) > maxDescription {
-			body["schema"] = map[string]any{"note": "the body schema is too large to show"}
+			if size(d) > maxDescription {
+				body["schema"] = schemaMap(mt.Schema, 0, false, map[*openapi3.Schema]bool{})
+			}
+			if size(d) > maxDescription {
+				body["schema"] = map[string]any{"note": "the body schema is too large to show"}
+			}
 		}
 	}
+	if size(d) > maxDescription {
+		if s, ok := d["description"].(string); ok {
+			d["description"] = cut(s, 500)
+		}
+		for _, p := range params {
+			p["description"] = cut(p["description"].(string), 500)
+		}
+	}
+	if size(d) > maxDescription {
+		min := map[string]any{"action": a.ID, "summary": cut(a.Summary, 200), "class": string(a.Class), "callable": d["callable"], "note": "the description is too large to show in full"}
+		if w, ok := d["why"].(string); ok {
+			min["why"] = cut(w, 200)
+		}
+		return min
+	}
 	return d
+}
+
+// cut keeps the first n characters of s.
+func cut(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
 }
 
 func size(d map[string]any) int {
