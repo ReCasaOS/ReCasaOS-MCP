@@ -14,17 +14,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Endpoint is the path an assistant connects to.
-const Endpoint = "/v2/mcp/server"
+const Endpoint = service.Endpoint
 
 type MCP struct {
 	tokens    *service.Store
 	catalogue *service.Catalogue
 	identity  *service.Identity
+	lanURL    func() (string, bool) // nil: unknown
 }
 
-func NewMCP(tokens *service.Store, catalogue *service.Catalogue, identity *service.Identity) codegen.ServerInterface {
-	return &MCP{tokens: tokens, catalogue: catalogue, identity: identity}
+func NewMCP(tokens *service.Store, catalogue *service.Catalogue, identity *service.Identity, lanURL func() (string, bool)) codegen.ServerInterface {
+	return &MCP{tokens: tokens, catalogue: catalogue, identity: identity, lanURL: lanURL}
 }
 
 func message(ctx echo.Context, code int, text string) error {
@@ -38,7 +38,14 @@ func toAPI(t service.Token) codegen.Token {
 // GetStatus counts the catalogue as last loaded: it is empty until the first tool call.
 func (m *MCP) GetStatus(ctx echo.Context) error {
 	byClass, unclassified := m.catalogue.Counts()
+	var lan *string
+	if m.lanURL != nil {
+		if u, ok := m.lanURL(); ok {
+			lan = &u
+		}
+	}
 	return ctx.JSON(http.StatusOK, codegen.Status{
+		LanUrl:   lan,
 		Version:  common.Version,
 		Endpoint: Endpoint,
 		Tokens:   len(m.tokens.List()),

@@ -120,6 +120,10 @@ components:
           type: string
           description: The path an assistant connects to
           example: /v2/mcp/server
+        lan_url:
+          type: string
+          description: The endpoint's address for a computer of the box's local network; absent when the box cannot tell
+          example: http://192.168.1.20/v2/mcp/server
         actions:
           $ref: "#/components/schemas/ActionCounts"
         unclassified:

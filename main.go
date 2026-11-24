@@ -129,6 +129,7 @@ func main() {
 				Tokens:    tokens,
 				Catalogue: actions,
 				Identity:  identity,
+				LANURL:    func() (string, bool) { return service.LANURL(service.DefaultGatewayINI) },
 			}),
 			"doc": route.InitV2DocRouter(_docHTML, _docYAML),
 		},

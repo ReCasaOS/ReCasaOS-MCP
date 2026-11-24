@@ -747,7 +747,7 @@ func (f *fixture) del(id string) {
 	e := echo.New()
 	rec := httptest.NewRecorder()
 	c := e.NewContext(httptest.NewRequest(http.MethodDelete, "/v2/mcp/tokens/"+id, nil), rec)
-	if err := v2Route.NewMCP(f.tokens, f.catalogue, f.identity).DeleteToken(c, id); err != nil || rec.Code != http.StatusNoContent {
+	if err := v2Route.NewMCP(f.tokens, f.catalogue, f.identity, nil).DeleteToken(c, id); err != nil || rec.Code != http.StatusNoContent {
 		f.t.Fatalf("%v %d", err, rec.Code)
 	}
 }
@@ -793,7 +793,7 @@ func TestStatusCountsActions(t *testing.T) {
 
 	e := echo.New()
 	rec := httptest.NewRecorder()
-	if err := v2Route.NewMCP(f.tokens, f.catalogue, f.identity).GetStatus(e.NewContext(httptest.NewRequest(http.MethodGet, "/v2/mcp/status", nil), rec)); err != nil {
+	if err := v2Route.NewMCP(f.tokens, f.catalogue, f.identity, nil).GetStatus(e.NewContext(httptest.NewRequest(http.MethodGet, "/v2/mcp/status", nil), rec)); err != nil {
 		t.Fatal(err)
 	}
 	var got struct {

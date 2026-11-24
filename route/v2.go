@@ -62,6 +62,8 @@ type Deps struct {
 	Catalogue *service.Catalogue
 	// Identity forgets an account's access token when its last token is revoked.
 	Identity *service.Identity
+	// LANURL gives the endpoint's address on the local network; nil or false: unknown.
+	LANURL func() (string, bool)
 }
 
 func isInternal(c echo.Context) bool {
@@ -143,7 +145,7 @@ func InitV2Router(deps Deps) http.Handler {
 		Options: openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc},
 	}))
 
-	codegen.RegisterHandlersWithBaseURL(e, v2Route.NewMCP(deps.Tokens, deps.Catalogue, deps.Identity), V2APIPath)
+	codegen.RegisterHandlersWithBaseURL(e, v2Route.NewMCP(deps.Tokens, deps.Catalogue, deps.Identity, deps.LANURL), V2APIPath)
 
 	mcp := server(deps.Server)
 

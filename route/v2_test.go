@@ -139,6 +139,25 @@ func TestStatusCountsTheTokens(t *testing.T) {
 	}
 }
 
+func TestStatusGivesTheLANURL(t *testing.T) {
+	token := box(t, "admin", true)
+	d := deps(t)
+	d.LANURL = func() (string, bool) { return "http://192.168.1.20/v2/mcp/server", true }
+	if _, body := answer(d, http.MethodGet, "/v2/mcp/status", token); !strings.Contains(body, `"lan_url":"http://192.168.1.20/v2/mcp/server"`) {
+		t.Fatalf("status: %s, want the LAN URL", body)
+	}
+}
+
+func TestStatusOmitsTheLANURLWhenUnknown(t *testing.T) {
+	token := box(t, "admin", true)
+	d := deps(t)
+	d.LANURL = func() (string, bool) { return "", false }
+	_, body := answer(d, http.MethodGet, "/v2/mcp/status", token)
+	if _, there := decode(t, body)["lan_url"]; there || strings.Contains(body, "lan_url") {
+		t.Fatalf("status: %s, want no lan_url", body)
+	}
+}
+
 func decode(t *testing.T, body string) map[string]any {
 	t.Helper()
 	var m map[string]any

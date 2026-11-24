@@ -18,7 +18,7 @@ Under `/v2/mcp`:
 
 - `POST /server`: the MCP endpoint, with a bearer token. It is not a REST route and is not
   in the OpenAPI file.
-- The owner's routes, described in `api/mcp/openapi.yaml`: `GET /status`,
+- The owner's routes, described in `api/mcp/openapi.yaml`: `GET /status` (it also gives the endpoint's address on the local network),
   `GET|POST /tokens`, `DELETE /tokens/{id}`.
 
 ## Connecting an assistant
