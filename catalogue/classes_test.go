@@ -162,6 +162,7 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 		"GET /v1/container/{id}",
 		"GET /v1/container/{id}/compose",
 		"GET /v2/app_management/backup/destinations/{name}/restic/password",
+		"GET /v2/app_management/appstore",
 		"GET /v2/app_management/compose",
 		"GET /v2/app_management/compose/{id}",
 		"GET /v2/app_management/compose/{id}/containers",
@@ -192,7 +193,7 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 // A deliberate, visible edit is needed to change the class of any described action.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 64, catalogue.Secret: 17, catalogue.Change: 60, catalogue.Danger: 29, catalogue.Never: 16,
+		catalogue.Read: 63, catalogue.Secret: 18, catalogue.Change: 60, catalogue.Danger: 29, catalogue.Never: 16,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
@@ -211,7 +212,7 @@ func TestClassCounts(t *testing.T) {
 
 func TestNoActingReadThroughACallerChosenHost(t *testing.T) {
 	const id = "GET /v2/app_management/web/frame-check"
-	if c := catalogue.Classes()[id]; c == catalogue.Read {
-		t.Errorf("%s makes the box call a host the caller chooses: not a read", id)
+	if c := catalogue.Classes()[id]; c != catalogue.Change {
+		t.Errorf("%s makes the box call a host the caller chooses: class %q, want change", id, c)
 	}
 }

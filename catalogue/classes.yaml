@@ -30,7 +30,7 @@
 "GET /v2/app_management/apps/{id}/compose": read # a store app's compose template
 "GET /v2/app_management/apps/{id}/stable": read # a store app's stable version tag
 "GET /v2/app_management/apps/{id}/stable/{serviceName}": read # a store app service's stable version tag
-"GET /v2/app_management/appstore": read # the registered app stores
+"GET /v2/app_management/appstore": secret # the registered app stores and their addresses (an address can carry a credential)
 "POST /v2/app_management/appstore": change # add an app store
 "DELETE /v2/app_management/appstore/{id}": change # remove an app store from the list
 "GET /v2/app_management/auto-update": read # the apps that update by themselves and the last nights
