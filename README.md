@@ -87,8 +87,7 @@ Seen:
 Not seen yet:
 
 - Installing and removing an app, and whether a client asks before `destroy`.
-- Secrets of apps, backups and destinations kept out of read results (only the core's and
-  the accounts service's actions were in the catalogue).
-- App management, storage, virtual machines; the module under systemd as root on a box.
+- The actions of app management, storage and virtual machines (only the core's and the
+  accounts service's actions were in the catalogue); the module under systemd on a box.
 - The token guard as it is now (a valid token always passes; bad ones are counted per
   address) was tested on Linux with the race detector, not on the stack.
