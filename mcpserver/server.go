@@ -31,6 +31,8 @@ type Deps struct {
 	Journal   *service.Journal
 	// Now is the clock of the rate limit and of the catalogue's age; nil is time.Now.
 	Now func() time.Time
+	// Note writes a line to the general log; nil writes nothing.
+	Note func(msg, addr string, count int)
 }
 
 // Handler serves POST /v2/mcp/server: the guard, then the MCP SDK's stateless JSON handler
@@ -47,7 +49,11 @@ func Handler(deps Deps) http.Handler {
 		// Behind the Gateway a request arrives on loopback with the box's own host name.
 		DisableLocalhostProtection: true,
 	})
-	return &guard{tokens: deps.Tokens, limit: newLimiter(now, maxAddresses), next: sdk}
+	note := deps.Note
+	if note == nil {
+		note = func(string, string, int) {}
+	}
+	return &guard{tokens: deps.Tokens, limit: newLimiter(now, maxAddresses), refused: newLimiter(now, maxAddresses), note: note, next: sdk}
 }
 
 func ptr[T any](v T) *T { return &v }

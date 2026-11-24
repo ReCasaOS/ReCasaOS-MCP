@@ -8,7 +8,9 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ReCasaOS/ReCasaOS-MCP/service"
 )
@@ -245,5 +247,118 @@ func TestReachedThroughTheGateway(t *testing.T) {
 	// the proxy appended the address it saw: that one is counted, not what the client claimed
 	if f.guard.limit.failures("127.0.0.1") != 1 || f.guard.limit.failures("1.2.3.4") != 0 {
 		t.Fatal("the failure was not counted under the proxy-appended address")
+	}
+}
+
+type loggedLine struct {
+	msg, addr string
+	count     int
+}
+
+// noted collects what the guard writes to the general log.
+type noted struct {
+	mu    sync.Mutex
+	lines []loggedLine
+}
+
+func (n *noted) note(msg, addr string, count int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.lines = append(n.lines, loggedLine{msg, addr, count})
+}
+
+func (n *noted) got() []loggedLine {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]loggedLine(nil), n.lines...)
+}
+
+func fixtureWithLog(t *testing.T) (*fixture, *noted) {
+	f := newFixture(t)
+	n := &noted{}
+	f.guard.note = n.note
+	return f, n
+}
+
+func TestFirstBadTokenIsLoggedOnce(t *testing.T) {
+	f, n := fixtureWithLog(t)
+	for i := 0; i < 10; i++ {
+		post(t, f.srv.URL, bearer("rcm_bad"), listBody)
+	}
+	got := n.got()
+	if len(got) != 1 || got[0].addr != "127.0.0.1" || got[0].count != 1 {
+		t.Fatalf("%+v, want one line for the first failure", got)
+	}
+}
+
+func TestReachingTheLimitIsLoggedOnce(t *testing.T) {
+	f, n := fixtureWithLog(t)
+	for i := 0; i < 25; i++ {
+		post(t, f.srv.URL, bearer("rcm_bad"), listBody)
+	}
+	got := n.got()
+	if len(got) != 2 || got[0].count != 1 || got[1].count != 11 || got[1].addr != "127.0.0.1" {
+		t.Fatalf("%+v, want the first failure then the 11th", got)
+	}
+}
+
+func TestANewWindowLogsAgain(t *testing.T) {
+	f, n := fixtureWithLog(t)
+	for i := 0; i < 12; i++ {
+		post(t, f.srv.URL, bearer("rcm_bad"), listBody)
+	}
+	f.clock.add(failWindow + time.Second)
+	for i := 0; i < 12; i++ {
+		post(t, f.srv.URL, bearer("rcm_bad"), listBody)
+	}
+	if got := n.got(); len(got) != 4 {
+		t.Fatalf("%+v, want 4 lines over two windows", got)
+	}
+}
+
+func TestForeignOriginIsLogged(t *testing.T) {
+	f, n := fixtureWithLog(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	for i := 0; i < 3; i++ {
+		post(t, f.srv.URL, with(bearer(plain), "Origin", "http://evil.example/secret?x=1"), listBody)
+	}
+	got := n.got()
+	if len(got) != 1 || got[0].addr != "127.0.0.1" {
+		t.Fatalf("%+v, want one line for the address", got)
+	}
+	// not from loopback: one line as well, for its own address
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/v2/mcp/server", strings.NewReader(listBody))
+		req.RemoteAddr = "192.168.1.9:40000"
+		f.guard.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	got = n.got()
+	if len(got) != 2 || got[1].addr != "192.168.1.9" {
+		t.Fatalf("%+v, want a second line for 192.168.1.9", got)
+	}
+}
+
+func TestLoggedLinesCarryNoToken(t *testing.T) {
+	f, n := fixtureWithLog(t)
+	h := with(bearer("rcm_presentedsecret"), "Origin", "")
+	for i := 0; i < 12; i++ {
+		post(t, f.srv.URL, h, listBody)
+	}
+	post(t, f.srv.URL, with(h, "Origin", "http://evil.example/rcm_presentedsecret"), listBody)
+	for _, l := range n.got() {
+		if all := l.msg + l.addr; strings.Contains(all, "rcm_") || strings.Contains(all, "Bearer") || strings.Contains(all, "evil") {
+			t.Fatalf("a logged line carries request data: %+v", l)
+		}
+	}
+}
+
+func TestAValidTokenLogsNothing(t *testing.T) {
+	f, n := fixtureWithLog(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	for i := 0; i < 3; i++ {
+		post(t, f.srv.URL, bearer(plain), listBody)
+	}
+	if got := n.got(); len(got) != 0 {
+		t.Fatalf("%+v, want nothing", got)
 	}
 }

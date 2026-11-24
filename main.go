@@ -122,7 +122,7 @@ func main() {
 	mux := &util_http.HandlerMultiplexer{
 		HandlerMap: map[string]http.Handler{
 			"v2": route.InitV2Router(route.Deps{
-				Server:    mcpserver.Handler(mcpserver.Deps{Tokens: tokens, Catalogue: actions, Box: box, Journal: journal}),
+				Server:    mcpserver.Handler(mcpserver.Deps{Tokens: tokens, Catalogue: actions, Box: box, Journal: journal, Note: noteRefusal}),
 				Tokens:    tokens,
 				Catalogue: actions,
 				Identity:  identity,
@@ -171,4 +171,8 @@ func httpServer(ctx context.Context, h http.Handler) *http.Server {
 		ReadHeaderTimeout: 5 * time.Second, // fix G112: Potential slowloris attack (see https://github.com/securego/gosec)
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
+}
+
+func noteRefusal(msg, addr string, count int) {
+	logger.Warn(msg, zap.String("address", addr), zap.Int("count", count))
 }

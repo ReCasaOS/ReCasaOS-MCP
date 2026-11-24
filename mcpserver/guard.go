@@ -27,19 +27,40 @@ func tokenFrom(ctx context.Context) (service.Token, bool) {
 type guard struct {
 	tokens *service.Store
 	limit  *limiter
-	next   http.Handler
+	// refused bounds the log lines of requests refused before the token is looked at.
+	refused *limiter
+	// note writes one line to the module's general log: never more than the address and a count.
+	note func(msg, addr string, count int)
+	next http.Handler
+}
+
+const (
+	msgBadToken = "a request with a bad or missing token"
+	msgSlowDown = "this address keeps sending bad tokens; it is now told to slow down"
+	msgOrigin   = "a request with a foreign Origin was refused"
+	msgNotLocal = "a request that did not come through the box's gateway was refused"
+	slowDownAt  = maxFailures + 1
+)
+
+// noteRefusal logs a refusal once per address and window.
+func (g *guard) noteRefusal(msg, addr string) {
+	if n, _, _ := g.refused.fail(addr); n == 1 {
+		g.note(msg, addr, n)
+	}
 }
 
 func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The module listens on loopback and is reached only through the box's Gateway.
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if ip, perr := netip.ParseAddr(host); err != nil || perr != nil || !ip.IsLoopback() {
+		g.noteRefusal(msgNotLocal, host)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	source := sourceAddress(r, host)
 
 	if !sameOrigin(r) {
+		g.noteRefusal(msgOrigin, source)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -48,7 +69,14 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// misconfigured client to slow down, and must never lock the owner's valid token out.
 	t, ok := g.authenticate(r)
 	if !ok {
-		if over, wait := g.limit.fail(source); over {
+		n, over, wait := g.limit.fail(source)
+		if n == 1 {
+			g.note(msgBadToken, source, n)
+		}
+		if n == slowDownAt {
+			g.note(msgSlowDown, source, n)
+		}
+		if over {
 			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
 			http.Error(w, "too many failed attempts: try again later", http.StatusTooManyRequests)
 			return

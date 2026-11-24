@@ -23,19 +23,19 @@ func TestLimiterIsOverAfterTenFailuresForAMinute(t *testing.T) {
 	c := newClock()
 	l := newLimiter(c.now, 100)
 	for i := 0; i < 10; i++ {
-		if over, _ := l.fail("a"); over {
+		if _, over, _ := l.fail("a"); over {
 			t.Fatalf("over at failure %d", i+1)
 		}
 	}
-	over, wait := l.fail("a")
+	_, over, wait := l.fail("a")
 	if !over || wait <= 0 || wait > time.Minute {
 		t.Fatalf("over %v wait %v", over, wait)
 	}
-	if over, _ := l.fail("b"); over {
+	if _, over, _ := l.fail("b"); over {
 		t.Fatal("another address is over too")
 	}
 	c.add(time.Minute)
-	if over, _ := l.fail("a"); over || l.failures("a") != 1 {
+	if _, over, _ := l.fail("a"); over || l.failures("a") != 1 {
 		t.Fatal("still over once the window passed")
 	}
 }
@@ -50,7 +50,7 @@ func TestABurstOfBadTokensIsCountedOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if o, _ := l.fail("a"); o {
+			if _, o, _ := l.fail("a"); o {
 				over.Add(1)
 			} else {
 				under.Add(1)
