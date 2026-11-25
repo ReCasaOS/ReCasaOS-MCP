@@ -9,8 +9,8 @@ in the dashboard. Nothing runs on the box but this endpoint: no model, no key, n
 with anyone. The box only answers the assistant you plugged in.
 
 Once it is connected you can ask things like "which of my apps have an update waiting?",
-"start a backup of Nextcloud to the NAS", "why is Immich unhealthy?" or "stop the Windows
-virtual machine".
+"start a backup of Nextcloud to the NAS", "why is Immich unhealthy?", "stop the Windows
+virtual machine", "how loaded is the box right now?" or "is an update of ReCasaOS waiting?".
 
 ## Install
 
@@ -21,6 +21,17 @@ On a box running ReCasaOS v0.5.192 or later:
 
 It needs no package and takes about 14 MB. `sudo casaos module remove mcp` takes it away;
 the tokens stay in `/var/lib/casaos-mcp/` until you delete that folder.
+
+The module is updated with ReCasaOS, or from the **Modules** page when it shows an update.
+The tokens are kept across an update.
+
+| Module | Comes with ReCasaOS | What it added |
+|---|---|---|
+| v0.1.0 | v0.5.192 | the apps, the backups, the virtual machines, merged storage, the vulnerability scan |
+| v0.2.0 | v0.5.193 | the system: its state and load, updates, modules, alerts, the upgrade of the operating system, restart and shutdown |
+
+The **Modules** page shows the version that is installed, and the module gives it to an
+assistant when it connects.
 
 ## Create a token
 
@@ -90,6 +101,9 @@ is not offered at all.** Today 241 actions are classed:
   vulnerability scan; the system (its state and load, the updates of ReCasaOS, of the
   packages and of Docker, the optional modules, the alerts and statistics settings, the
   guided upgrade of the operating system, restart and shutdown).
+  Shutdown, restart, every update, the install and removal of a module and each step of
+  the operating system's upgrade that acts are `danger`: they go through `destroy`, and a
+  *Read only* token neither finds nor runs them.
 - **Not offered yet:** the drives, the shares, the accounts,
   Files and the fleet (154 routes, listed in [`catalogue/uncovered.txt`](catalogue/uncovered.txt)).
   They come area by area.
@@ -113,8 +127,9 @@ is not offered at all.** Today 241 actions are classed:
   not supported yet.
 - Sending and fetching files, live streams and consoles are not offered.
 - A box with several networks gives the address of its main one in the command.
-- The list of actions is loaded when an assistant first connects, so the card shows none
-  before that.
+- The box's own list of actions is loaded when an assistant first connects, so the card's
+  count is incomplete before that.
+- An action the box is too old to have answers with the box's own "not found".
 
 ## Development
 
@@ -141,8 +156,18 @@ is neither described nor listed in `catalogue/uncovered.txt`. The rules for choo
 are at the top of the classes file; `TestClassCounts` holds the totals, so that a change of
 class is always a visible edit.
 
-A release is a tag `v<number>.<number>.<number>` on `main`; the installer's catalogue then
-pins that tag and its commit.
+The box serves no description of its older `/v1` routes. The module carries hand-written
+ones, one file per area under [`catalogue/v1/`](catalogue/v1/) (OpenAPI, written from the
+handlers: what each one reads, and a sentence an assistant can search). They join the
+catalogue beside the box's own and follow the same rule: no class, not offered. The tests
+hold each of them to the list of routes, refuse one that the box also describes, and
+[`catalogue/v1/not-in-routes.txt`](catalogue/v1/not-in-routes.txt) names those newer than
+that list. An assistant finds an action by the words of its summary, its path and its
+name: put there the words a person would type.
+
+A release is a tag `v<number>.<number>.<number>` on `main`, after `Version` in
+`common/constants.go` has been set to the same number; the installer's catalogue then pins
+that tag and its commit.
 
 ## Tested
 
@@ -151,7 +176,12 @@ pins that tag and its commit.
   with a real MCP client: tokens created and revoked, the three reading tools alone with a
   read token, a read and a change run, a revoked token refused at once, the journal free of
   any value.
-- On a real box by the maintainer, before the release that first offered it.
+- For the system's actions (v0.2.0), on the same stack: a read token reads the load and the
+  update channel and neither finds nor can call shutdown, the updates or the upgrade plan; a
+  full token changes the update channel and puts it back; thirty system actions called,
+  each answered by the box. No action that goes through `destroy` was run.
+- On a real box by the maintainer, before the release that first offered the module
+  (v0.1.0).
 
 ## Licence
 
