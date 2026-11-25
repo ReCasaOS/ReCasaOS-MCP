@@ -60,6 +60,35 @@ func described(t *testing.T) map[string]service.Action {
 	return out
 }
 
+// embeddedActions returns every action of the embedded descriptions, by id.
+func embeddedActions(t *testing.T) map[string]service.Action {
+	t.Helper()
+	out := map[string]service.Action{}
+	for name, raw := range catalogue.Embedded() {
+		as, err := service.ParseActions(raw)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, a := range as {
+			if _, dup := out[a.ID]; dup {
+				t.Fatalf("%s: %s is described twice", name, a.ID)
+			}
+			out[a.ID] = a
+		}
+	}
+	return out
+}
+
+// everyDescribed is the box's descriptions and the embedded ones.
+func everyDescribed(t *testing.T) map[string]service.Action {
+	t.Helper()
+	out := described(t)
+	for id, a := range embeddedActions(t) {
+		out[id] = a
+	}
+	return out
+}
+
 var ownRoutes = []string{
 	"POST /v2/mcp/server", "GET /v2/mcp/status", "GET /v2/mcp/tokens", "POST /v2/mcp/tokens",
 	"DELETE /v2/mcp/tokens/{id}", "POST /v1/users/internal/access-token",
@@ -89,7 +118,7 @@ func TestEveryDescribedActionIsClassedOrCounted(t *testing.T) {
 
 func TestNoClassWithoutARoute(t *testing.T) {
 	known := map[string]bool{}
-	for id := range described(t) {
+	for id := range everyDescribed(t) {
 		known[id] = true
 	}
 	for _, l := range lines(t, "../testdata/routes.txt") {
@@ -107,7 +136,7 @@ func TestNoClassWithoutARoute(t *testing.T) {
 
 func TestEveryRouteIsDescribedOrListedUncovered(t *testing.T) {
 	desc := map[string]bool{}
-	for id := range described(t) {
+	for id := range everyDescribed(t) {
 		desc[norm(id)] = true
 	}
 	routes := map[string]bool{}
@@ -182,6 +211,16 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 		"GET /v2/casaos/zt/info",
 		"GET /v2/virt_management/images/downloads",
 		"PUT /v2/app_management/backup/destinations/{name}/restic",
+		"GET /v1/sys/alerts",
+		"GET /v1/sys/debug",
+		"GET /v1/sys/docker/update/status",
+		"GET /v1/sys/feeds",
+		"GET /v1/sys/logs",
+		"GET /v1/sys/os/upgrade/runbook",
+		"GET /v1/sys/os/upgrade/status",
+		"GET /v1/sys/packages/update/status",
+		"GET /v1/sys/os/upgrade/plan",
+		"GET /v1/sys/modules/{name}/status",
 	}
 	classes := catalogue.Classes()
 	for _, id := range known {
@@ -194,14 +233,15 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 	}
 }
 
-// A deliberate, visible edit is needed to change the class of any described action.
+// A deliberate, visible edit is needed to change the class of any described action,
+// the box's and the embedded ones alike. 186 are described by the box, 55 by v1/system.yaml.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 58, catalogue.Secret: 22, catalogue.Change: 61, catalogue.Danger: 29, catalogue.Never: 16,
+		catalogue.Read: 75, catalogue.Secret: 32, catalogue.Change: 70, catalogue.Danger: 43, catalogue.Never: 21,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
-	for id := range described(t) {
+	for id := range everyDescribed(t) {
 		got[classes[id]]++
 	}
 	for c, n := range want {
@@ -233,6 +273,38 @@ func TestAReadThatContactsARemoteIsNotAPlainRead(t *testing.T) {
 	for id, c := range want {
 		if classes[id] != c {
 			t.Errorf("%s is %q, want %q", id, classes[id], c)
+		}
+	}
+}
+
+func TestSystemPowerAndUpdatesAreDanger(t *testing.T) {
+	classes := catalogue.Classes()
+	for _, id := range []string{
+		"PUT /v1/sys/state/{state}",
+		"POST /v1/sys/stop",
+		"POST /v1/sys/update",
+		"POST /v1/sys/packages/update",
+		"POST /v1/sys/docker/update",
+		"POST /v1/sys/modules/{name}/install",
+		"POST /v1/sys/modules/{name}/remove",
+		"POST /v1/sys/os/upgrade/start",
+		"POST /v1/sys/os/upgrade/reboot",
+		"POST /v1/sys/os/upgrade/resume",
+		"POST /v1/sys/os/upgrade/abort",
+		"POST /v1/sys/os/upgrade/refresh",
+		"POST /v1/sys/os/upgrade/ack",
+	} {
+		if classes[id] != catalogue.Danger {
+			t.Errorf("%s is %q, want danger", id, classes[id])
+		}
+	}
+}
+
+func TestTerminalAndFetchAreNever(t *testing.T) {
+	classes := catalogue.Classes()
+	for _, id := range []string{"GET /v1/sys/wsssh", "POST /v1/sys/ssh-login", "GET /v1/sys/proxy"} {
+		if classes[id] != catalogue.Never {
+			t.Errorf("%s is %q, want never", id, classes[id])
 		}
 	}
 }

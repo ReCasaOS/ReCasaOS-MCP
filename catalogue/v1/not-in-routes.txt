@@ -1,0 +1,5 @@
+# newer than the list of routes: embedded actions that testdata/routes.txt does not list yet (the list is older than the core)
+GET /v1/sys/feeds
+GET /v1/sys/update-channel
+PUT /v1/sys/feeds
+PUT /v1/sys/update-channel

@@ -79,7 +79,8 @@ var toolDefs = []toolDef{
 		name: "search_actions",
 		description: `Search the actions of this home server's API: apps, storage, files, users, settings, virtual machines and more. ` +
 			`Start here. Give a few words of what you want to do; each result names the action, what it does, its class and the tool that runs it. ` +
-			`Then call describe_action on the action before running it with that tool.`,
+			`Then call describe_action on the action before running it with that tool. ` +
+			`It returns a JSON list of actions; while the box's own list is still loading, it returns an object {actions, note} instead.`,
 		schema: `{"type":"object","properties":{` +
 			`"query":{"type":"string","description":"A few words of what you want to do, e.g. \"list installed apps\"."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":20,"default":10,"description":"How many results to return, 1 to 20."}},` +
@@ -183,11 +184,8 @@ func (r *refresher) refresh(done chan struct{}, account int) {
 	cancel()
 	logRefresh(err)
 	// a source that fails does not make the others unloaded
-	byClass, unclassified := r.cat.Counts()
-	some := unclassified > 0
-	for _, n := range byClass {
-		some = some || n > 0
-	}
+	// the embedded actions are always there: only the box's own descriptions count as loaded
+	some := r.cat.HasBoxActions()
 
 	r.mu.Lock()
 	r.loaded = r.loaded || err == nil || some

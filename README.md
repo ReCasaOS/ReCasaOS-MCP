@@ -75,24 +75,26 @@ dashboard: the box's own rules judge it.
 
 Each action of the box's API carries a class in [`catalogue/classes.yaml`](catalogue/classes.yaml),
 written after reading what the action does and what it answers. **An action without a class
-is not offered at all.** Today 186 actions are classed:
+is not offered at all.** Today 241 actions are classed:
 
 | Class | Count | Meaning | Who gets it |
 |---|---|---|---|
-| `read` | 58 | only looks, and answers with nothing private | every token |
-| `secret` | 22 | reads something that can carry a secret | Everything |
-| `change` | 61 | alters the box | Everything |
-| `danger` | 29 | can lose data or lock someone out | Everything, through `destroy` |
-| `never` | 16 | not offered to any assistant | nobody |
+| `read` | 75 | only looks, and answers with nothing private | every token |
+| `secret` | 32 | reads something that can carry a secret | Everything |
+| `change` | 70 | alters the box | Everything |
+| `danger` | 43 | can lose data or lock someone out | Everything, through `destroy` |
+| `never` | 21 | not offered to any assistant | nobody |
 
 - **Offered:** the apps and their store, updates, logs and statistics; the backups, their
   schedules and destinations; the virtual machines; merged storage and mounts; the
-  vulnerability scan.
-- **Not offered yet:** the older routes of the system, the drives, the shares, the accounts,
-  Files and the fleet (205 routes, listed in [`catalogue/uncovered.txt`](catalogue/uncovered.txt)).
+  vulnerability scan; the system (its state and load, the updates of ReCasaOS, of the
+  packages and of Docker, the optional modules, the alerts and statistics settings, the
+  guided upgrade of the operating system, restart and shutdown).
+- **Not offered yet:** the drives, the shares, the accounts,
+  Files and the fleet (154 routes, listed in [`catalogue/uncovered.txt`](catalogue/uncovered.txt)).
   They come area by area.
 - **Never offered:** passwords, two-factor settings, the creation or deletion of accounts,
-  cloud sign-ins, uploads and downloads of files, live streams, consoles and terminals, and
+  cloud sign-ins, uploads and downloads of files, live streams, consoles and terminals, the SSH sign-in, and
   the module's own tokens.
 
 ## What is kept

@@ -45,23 +45,62 @@ type state struct {
 // Catalogue is the list of actions an AI client may search. It is safe for
 // concurrent use.
 type Catalogue struct {
-	src     fetcher
-	classes map[string]catalogue.Class
+	src      fetcher
+	classes  map[string]catalogue.Class
+	embedded []Action // the hand-written descriptions: parsed once, never refreshed
+	embErrs  []error  // one per embedded file that was refused
 
 	mu  sync.RWMutex
 	cur *state
 }
 
-func NewCatalogue(box *Box) *Catalogue { return newCatalogue(box, catalogue.Classes()) }
+func NewCatalogue(box *Box) *Catalogue {
+	return newCatalogueWith(box, catalogue.Classes(), catalogue.Embedded())
+}
 
 // NewCatalogueWithClasses is NewCatalogue with classes of the caller's own, for tests of
 // other packages.
 func NewCatalogueWithClasses(box *Box, classes map[string]catalogue.Class) *Catalogue {
-	return newCatalogue(box, classes)
+	return newCatalogueWith(box, classes, catalogue.Embedded())
 }
 
 func newCatalogue(src fetcher, classes map[string]catalogue.Class) *Catalogue {
-	return &Catalogue{src: src, classes: classes, cur: build(nil, nil)}
+	return newCatalogueWith(src, classes, nil)
+}
+
+// newCatalogueWith adds hand-written descriptions, by file name. A file that does not
+// parse is refused whole and reported by EmbeddedErrors; the other files and the
+// box's sources are not affected.
+func newCatalogueWith(src fetcher, classes map[string]catalogue.Class, embedded map[string][]byte) *Catalogue {
+	c := &Catalogue{src: src, classes: classes}
+	names := make([]string, 0, len(embedded))
+	for name := range embedded {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		as, err := ParseActions(embedded[name])
+		if err != nil {
+			c.embErrs = append(c.embErrs, fmt.Errorf("embedded description %s: %w", name, err))
+			continue
+		}
+		c.embedded = append(c.embedded, as...)
+	}
+	c.cur = build(nil, c.embedded, classes)
+	return c
+}
+
+// EmbeddedErrors lists the embedded descriptions that were refused, for the caller to log.
+func (c *Catalogue) EmbeddedErrors() []error { return c.embErrs }
+
+// HasBoxActions says whether any description read from the box is in the catalogue.
+func (c *Catalogue) HasBoxActions() bool {
+	for _, as := range c.state().bySource {
+		if len(as) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseActions lists the operations of one OpenAPI description. The full path
@@ -170,7 +209,7 @@ func (c *Catalogue) Refresh(ctx context.Context, account int) error {
 			}
 		}
 	}
-	st := build(next, c.classes)
+	st := build(next, c.embedded, c.classes)
 	c.mu.Lock()
 	c.cur = st
 	c.mu.Unlock()
@@ -195,17 +234,21 @@ func (c *Catalogue) read(ctx context.Context, account int, src string) ([]Action
 }
 
 // build joins the descriptions with the classes. Only an action with a known
-// class other than never is exposed; an id that two sources both describe is
+// class other than never is exposed; an id that two sources (embedded ones too) both describe is
 // ambiguous and left out altogether.
-func build(bySource map[string][]Action, classes map[string]catalogue.Class) *state {
+func build(bySource map[string][]Action, embedded []Action, classes map[string]catalogue.Class) *state {
 	st := &state{bySource: bySource, byID: map[string]Action{}, counts: map[catalogue.Class]int{}}
-	seen := map[string]int{}
+	lists := [][]Action{embedded}
 	for _, as := range bySource {
+		lists = append(lists, as)
+	}
+	seen := map[string]int{}
+	for _, as := range lists {
 		for _, a := range as {
 			seen[a.ID]++
 		}
 	}
-	for _, as := range bySource {
+	for _, as := range lists {
 		for _, a := range as {
 			if seen[a.ID] > 1 {
 				continue

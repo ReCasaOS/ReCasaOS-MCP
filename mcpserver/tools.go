@@ -40,10 +40,8 @@ func (ts *tools) handler(t service.Token, tool string) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		var o outcome
 		switch loaded := ts.refresh.ensure(ctx, t.Account); {
-		case tool == "search_actions" && !loaded:
-			o = failure("-", notLoaded)
 		case tool == "search_actions":
-			o = ts.search(t, req.Params.Arguments)
+			o = ts.search(t, req.Params.Arguments, loaded)
 		case tool == "describe_action":
 			o = ts.describe(t, req.Params.Arguments, loaded)
 		default:
@@ -91,6 +89,8 @@ func (ts *tools) visible(id string, level service.Level) (service.Action, bool) 
 	return a, true
 }
 
+const notLoadedNote = "the box's own list of actions is not loaded yet: more may be found in a moment"
+
 const notLoaded = "the list of actions is not loaded yet; try again in a moment"
 
 // unknown is the answer for an action the token cannot see. Before the catalogue was ever
@@ -113,7 +113,7 @@ func asJSON(v any) string {
 	return string(b)
 }
 
-func (ts *tools) search(t service.Token, raw json.RawMessage) outcome {
+func (ts *tools) search(t service.Token, raw json.RawMessage, loaded bool) outcome {
 	var in struct {
 		Query *string `json:"query"`
 		Limit *int    `json:"limit"`
@@ -143,7 +143,14 @@ func (ts *tools) search(t service.Token, raw json.RawMessage) outcome {
 			hits = append(hits, hit{a.ID, a.Summary, string(a.Class), toolFor(a.Class)})
 		}
 	}
-	return outcome{text: asJSON(hits), action: "-", status: "ok"}
+	if loaded {
+		return outcome{text: asJSON(hits), action: "-", status: "ok"}
+	}
+	// the box's descriptions never loaded: only the embedded actions can be found
+	if len(hits) == 0 {
+		return failure("-", notLoaded)
+	}
+	return outcome{text: asJSON(map[string]any{"actions": hits, "note": notLoadedNote}), action: "-", status: "ok"}
 }
 
 func (ts *tools) describe(t service.Token, raw json.RawMessage, loaded bool) outcome {
