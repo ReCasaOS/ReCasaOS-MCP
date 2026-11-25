@@ -665,7 +665,7 @@ paths:
   /state/{state}:
     put:
       operationId: setMachinePowerState
-      summary: "Shut down or restart the whole machine."
+      summary: "Shut down (shutdown, power off) or restart (reboot) the whole machine."
       description: "`off` powers the machine off: it stays unreachable until someone turns it on by hand. `restart` reboots it: the dashboard and every app are unreachable for a few minutes. Refused while an operating system upgrade is working on the machine."
       parameters:
         - name: state
