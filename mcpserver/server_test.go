@@ -807,7 +807,7 @@ func TestStatusCountsActions(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(got.Actions) != "map[change:2 danger:2 read:3 secret:1]" || got.Unclassified != 1 || got.Tokens != 1 {
+	if fmt.Sprint(got.Actions) != "map[change:2 danger:2 read:3 secret:1]" || got.Unclassified != 53 || got.Tokens != 1 { // 53 = the fixture's /unknown + the 52 embedded system actions its testClasses leaves out
 		t.Fatalf("%s", rec.Body)
 	}
 }

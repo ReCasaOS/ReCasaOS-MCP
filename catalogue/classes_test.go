@@ -211,6 +211,14 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 		"GET /v2/casaos/zt/info",
 		"GET /v2/virt_management/images/downloads",
 		"PUT /v2/app_management/backup/destinations/{name}/restic",
+		"GET /v1/sys/alerts",
+		"GET /v1/sys/debug",
+		"GET /v1/sys/docker/update/status",
+		"GET /v1/sys/feeds",
+		"GET /v1/sys/logs",
+		"GET /v1/sys/os/upgrade/runbook",
+		"GET /v1/sys/os/upgrade/status",
+		"GET /v1/sys/packages/update/status",
 	}
 	classes := catalogue.Classes()
 	for _, id := range known {
@@ -224,10 +232,10 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 }
 
 // A deliberate, visible edit is needed to change the class of any described action,
-// the box's and the embedded ones alike.
+// the box's and the embedded ones alike. 186 are described by the box, 55 by v1/system.yaml.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 59, catalogue.Secret: 22, catalogue.Change: 62, catalogue.Danger: 30, catalogue.Never: 16,
+		catalogue.Read: 77, catalogue.Secret: 30, catalogue.Change: 70, catalogue.Danger: 43, catalogue.Never: 21,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
@@ -263,6 +271,36 @@ func TestAReadThatContactsARemoteIsNotAPlainRead(t *testing.T) {
 	for id, c := range want {
 		if classes[id] != c {
 			t.Errorf("%s is %q, want %q", id, classes[id], c)
+		}
+	}
+}
+
+func TestSystemPowerAndUpdatesAreDanger(t *testing.T) {
+	classes := catalogue.Classes()
+	for _, id := range []string{
+		"PUT /v1/sys/state/{state}",
+		"POST /v1/sys/stop",
+		"POST /v1/sys/update",
+		"POST /v1/sys/packages/update",
+		"POST /v1/sys/docker/update",
+		"POST /v1/sys/modules/{name}/install",
+		"POST /v1/sys/modules/{name}/remove",
+		"POST /v1/sys/os/upgrade/start",
+		"POST /v1/sys/os/upgrade/reboot",
+		"POST /v1/sys/os/upgrade/resume",
+		"POST /v1/sys/os/upgrade/abort",
+	} {
+		if classes[id] != catalogue.Danger {
+			t.Errorf("%s is %q, want danger", id, classes[id])
+		}
+	}
+}
+
+func TestTerminalAndFetchAreNever(t *testing.T) {
+	classes := catalogue.Classes()
+	for _, id := range []string{"GET /v1/sys/wsssh", "POST /v1/sys/ssh-login", "GET /v1/sys/proxy"} {
+		if classes[id] != catalogue.Never {
+			t.Errorf("%s is %q, want never", id, classes[id])
 		}
 	}
 }

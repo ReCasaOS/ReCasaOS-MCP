@@ -5,40 +5,884 @@ info:
 servers:
   - url: /v1/sys
 paths:
-  /utilization:
+  /alerts:
     get:
-      operationId: getSystemUtilization
-      summary: Show the box's CPU, memory and network use right now
+      operationId: getAlertSettings
+      summary: "Push alert settings: the channels by name, service and host, the categories that are on, the disk threshold and the last send that failed."
       responses:
-        '200': {description: ok}
-  /update-channel:
+        '200':
+          description: "The channels (id, name, service, host; never their address), the categories, the disk threshold and the last failure."
     put:
-      operationId: putUpdateChannel
-      summary: Choose whether manual updates offer pre-releases
+      operationId: setAlertSettings
+      summary: "Change the push alerts: the channels they go to, which categories are on, and the disk-full threshold."
+      description: "Every field is optional; a field left out keeps its value. `channels` REPLACES the whole list: a channel left out is deleted. To keep an existing channel unchanged send its `id` with no `url` (call `getAlertSettings` first for the ids). A new channel needs a `url`."
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [channel]
               properties:
-                channel:
-                  type: string
-                  enum: [release, prerelease]
+                channels:
+                  type: array
+                  description: "The full list of channels after the change."
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        description: "An existing channel's id; leave out for a new channel."
+                      name:
+                        type: string
+                        description: "The name shown on the dashboard."
+                      url:
+                        type: string
+                        description: "A Shoutrrr address (ntfy://, telegram://, smtp://...). Leave out to keep the stored one of an existing id."
+                categories:
+                  type: object
+                  description: "Category name to on/off. Unknown names are ignored."
+                  properties:
+                    backups: {type: boolean}
+                    disks: {type: boolean}
+                    updates: {type: boolean}
+                    apps: {type: boolean}
+                    resources: {type: boolean}
+                    fleet: {type: boolean}
+                    app-updates: {type: boolean}
+                    cleanup: {type: boolean}
+                    vulnerabilities: {type: boolean}
+                disk_threshold:
+                  type: integer
+                  minimum: 50
+                  maximum: 99
+                  description: "Alert when a disk is fuller than this percentage."
       responses:
-        '200': {description: ok}
+        '200':
+          description: "The new settings, as getAlertSettings answers them."
+  /alerts/test:
+    post:
+      operationId: sendTestAlert
+      summary: "Send a test message to one alert channel, or to all of them, and say for each whether it arrived."
+      description: "Leave `channel_id` out to test every channel. Waits up to 15 seconds for the channels to answer."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel_id:
+                  type: string
+                  description: "The id of the channel to test (from getAlertSettings); empty or absent for all."
+      responses:
+        '200':
+          description: "One result per channel: id, ok, and the error when it failed."
+  /autoupdate:
+    get:
+      operationId: getAutoUpdate
+      summary: Whether ReCasaOS updates itself at night, in which time window, what it is waiting for and how its last attempt went.
+      responses:
+        '200':
+          description: Automatic updates on or off, the window (HH:MM, the box's local time), the state, the next release aimed at and the last attempt.
+    put:
+      operationId: setAutoUpdate
+      summary: Turn ReCasaOS's nightly automatic updates on or off, change their time window, or resume them after they paused on failures.
+      description: >-
+        Every field is optional and only the fields given change. The window is HH:MM in the box's local time and must
+        last at least one hour (a 400 otherwise, and nothing is written). resume true clears the failed attempts, which
+        lifts a pause. The nightly update installs releases only, whatever the update channel says.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: Automatic updates on (true) or off (false).
+                window_start:
+                  type: string
+                  description: Start of the nightly window, HH:MM in the box's local time.
+                window_end:
+                  type: string
+                  description: End of the nightly window, HH:MM in the box's local time; at least one hour after the start.
+                resume:
+                  type: boolean
+                  description: true clears the failed attempts, and so lifts a pause.
+      responses:
+        '200':
+          description: The new settings and state, as the read gives them.
+  /debug:
+    get:
+      operationId: getBugReportInfo
+      summary: "A ready-made text for a bug report: operating system, ReCasaOS version, disk size and use, kernel line and the newest version offered."
+      responses:
+        '200':
+          description: "The bug-report text."
+  /docker/containers:
+    get:
+      operationId: listContainersStoppedByDockerUpdate
+      summary: The containers running now, which an update of Docker would stop, and whether each restarts by itself.
+      responses:
+        '200':
+          description: Whether the Docker daemon answered, and the running containers (name, image, restart policy).
+  /docker/update:
+    post:
+      operationId: startDockerUpdate
+      summary: Update the Docker engine to the version the package check offered; every app stops while it runs.
+      description: >-
+        Call `checkSystemPackageUpdates` first: its `docker.update.plan_id` is the plan to confirm here, and
+        `listContainersStoppedByDockerUpdate` shows the apps that will stop. Every running container is stopped, Docker is
+        reinstalled and restarted, and only containers with a restart policy start again by themselves. The update runs in
+        the background: follow it with `getDockerUpdateStatus`. 409 when refused (data.error_code says why), 400 when the
+        plan_id is not a plan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - plan_id
+              properties:
+                plan_id:
+                  type: string
+                  description: The docker.update.plan_id that the package check returned (64 hex digits).
+                allow_held:
+                  type: boolean
+                  description: true when the owner agrees to go ahead although Docker's packages are on hold (docker.update.held in the check); false when left out.
+      responses:
+        '200':
+          description: The state of the update that began.
+  /docker/update/status:
+    get:
+      operationId: getDockerUpdateStatus
+      summary: How the update of the Docker engine is going, or how it went, with the end of its log.
+      responses:
+        '200':
+          description: State, phase, outcome, versions before and after, containers that did not come back, a rollback command when it failed, and the end of the unit's log.
+  /entry:
+    get:
+      operationId: getDashboardModuleEntries
+      summary: "The entries that the dashboard's built-in modules add, as declared by each module installed in the dashboard."
+      responses:
+        '200':
+          description: "A JSON list of the modules' entry declarations."
+  /feeds:
+    get:
+      operationId: getFooterFeeds
+      summary: "The news feeds shown in the dashboard footer: whether they are on, their addresses and the latest headlines."
+      description: "Answers what is cached; when the cache is older than 30 minutes the box refreshes the feeds in the background."
+      responses:
+        '200':
+          description: "enabled, the feed addresses, the cached headlines (title, link, source) and the last error per feed."
+    put:
+      operationId: setFooterFeeds
+      summary: "Turn the dashboard footer's news feeds on or off and set which feeds it shows."
+      description: "Replaces both settings: send `enabled` and the full `feeds` list every time (a missing `enabled` turns the feeds off, a missing `feeds` empties the list). At most 10 feeds, each an http(s) address."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                feeds:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: string
+                    description: "An RSS or Atom address, http or https, at most 2048 characters."
+      responses:
+        '200':
+          description: "The new settings and headlines, as getFooterFeeds answers them."
+  /hardware:
+    get:
+      operationId: getHardwareInfo
+      summary: "What the machine is: its board or model name and its processor architecture."
+      responses:
+        '200':
+          description: "drive_model (the device-tree model, often empty on a PC) and arch."
+  /logs:
+    get:
+      operationId: getCoreLog
+      summary: "The log file of the ReCasaOS core service, as text."
+      description: "The whole file comes back, whatever `line` says: it can be large."
+      parameters:
+        - name: line
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: "Number of lines wanted. Read by the handler but currently ignored: the whole log is returned."
+      responses:
+        '200':
+          description: "The content of the core's log file."
+  /modules:
+    get:
+      operationId: listSystemModules
+      summary: "The add-on modules this ReCasaOS release can install, which are installed, and whether each suits this machine."
+      responses:
+        '200':
+          description: "The catalogue state and, per module, name, title, description, tier, tag, installed version and whether the system supports it."
+  /modules/{name}/install:
+    post:
+      operationId: installSystemModule
+      summary: "Install an add-on module, or update an installed one, as described by a plan made just before."
+      description: "Call `planSystemModule` first (with the same `mode`), check it is not refused, then call this with the `plan_id` it returned. The box re-makes the plan and refuses if it changed. The install runs in the background as root; follow it with `getSystemModuleStatus`."
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9-]{0,31}$"
+          description: "The module's name, as listSystemModules gives it."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [plan_id]
+              properties:
+                plan_id:
+                  type: string
+                  description: "The plan_id from planSystemModule."
+                mode:
+                  type: string
+                  enum: [install, update]
+                  default: install
+      responses:
+        '202':
+          description: "The job started; data is the module's status with job.state running."
+  /modules/{name}/plan:
+    post:
+      operationId: planSystemModule
+      summary: "Check whether an add-on module can be installed or updated, and what it would add to the machine, without changing anything."
+      description: "Takes up to 60 seconds. A plan that is refused still answers 200, with `refused` set to the first failed check. Pass the returned `plan_id` to `installSystemModule` with the same `mode`."
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9-]{0,31}$"
+          description: "The module's name, as listSystemModules gives it."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [install, update]
+                  default: install
+      responses:
+        '200':
+          description: "The checks in order, refused (null or a code), the packages it would install with their sizes, and plan_id."
+  /modules/{name}/remove:
+    post:
+      operationId: removeSystemModule
+      summary: "Remove an installed add-on module: its service is stopped and the files it installed are deleted."
+      description: "Packages are never purged and the module's data is not touched. Runs in the background as root; follow it with `getSystemModuleStatus`. The body must be an empty object `{}`."
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9-]{0,31}$"
+          description: "The module's name, as listSystemModules gives it."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+      responses:
+        '202':
+          description: "The job started; data is the module's status with job.state running."
+  /modules/{name}/status:
+    get:
+      operationId: getSystemModuleStatus
+      summary: "How the last install, update or removal of an add-on module went, and whether the module is installed and running."
+      description: "Safe to call every few seconds while a job runs."
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z][a-z0-9-]{0,31}$"
+          description: "The module's name, as listSystemModules gives it."
+      responses:
+        '200':
+          description: "job (kind, state, step, code, undo, times, last log lines) and status (installed, version, unit, route)."
+  /os:
+    get:
+      operationId: getOperatingSystem
+      summary: Which operating system the box runs, until when it gets security updates, and which release comes next.
+      responses:
+        '200':
+          description: The system's identity, its support dates and the next release when there is one.
+  /os/readiness:
+    get:
+      operationId: getOSUpgradeReadiness
+      summary: Whether the box could be upgraded to the next release of its operating system now, and what stands in the way.
+      description: >-
+        Only reads the machine; it takes up to twenty seconds. Usually the first look before planning an upgrade.
+      responses:
+        '200':
+          description: The state (ready, attention, blocked, latest, unsupported), the checks by code with their severity, and the same report as plain text.
+  /os/upgrade/abort:
+    post:
+      operationId: abortOSUpgrade
+      summary: Call off a running OS upgrade, refresh or rehearsal before its point of no return, and put the machine back as it was.
+      description: >-
+        Valid only while `getOSUpgradeStatus` lists `abort` in its actions: while a refresh or a rehearsal runs, or a hop
+        runs before block 5 (its point of no return). After that nothing can be called off (409 not_abortable). The
+        unit is stopped and undoes what it did; follow it with `getOSUpgradeStatus`. Send the empty object {} as body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: Always the empty object {}.
+      responses:
+        '202':
+          description: The status of the upgrade, now unwinding.
+  /os/upgrade/ack:
+    post:
+      operationId: closeOSUpgradeRun
+      summary: Close an OS upgrade run that is no longer running, drop it and its plan, or hand it over to the owner to finish by hand.
+      description: >-
+        Use only an action that `getOSUpgradeStatus` lists: acknowledge closes a run that ended or stopped, which lets
+        backups and automatic updates run again; discard does the same and drops the plan (for a rehearsal it starts
+        putting the machine back); manual (listed as `takeover`) makes ReCasaOS stop acting so the owner finishes the hop
+        by hand from the runbook. A machine left half upgraded is let go of only with the word the status gives in
+        ack_word, typed in word: it lifts the guard that keeps backups and updates away from a machine dpkg has begun to
+        change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - acknowledge
+                    - discard
+                    - manual
+                word:
+                  type: string
+                  description: The status's ack_word, only when the status gives one; letters, digits and dashes.
+      responses:
+        '200':
+          description: The status of the upgrade after the owner's word.
+  /os/upgrade/beta:
+    post:
+      operationId: setOSUpgradeFeature
+      summary: Switch the operating-system upgrade feature (a beta) on or off on this box.
+      description: >-
+        The switch gates only what begins something (a refresh or a start); a run already open goes on whatever it says.
+        Turning it off while a run is open is refused (409 run_open). It creates or removes /etc/casaos/os-upgrade.beta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+                  description: true turns the feature on, false off.
+      responses:
+        '200':
+          description: data.beta_enabled, what the switch is now.
+  /os/upgrade/plan:
+    get:
+      operationId: getOSUpgradePlan
+      summary: How the plan of the upgrade to the next OS release is going, and once it is done, what apt would do.
+      description: >-
+        Poll it after `startOSUpgradePlan` until state is done or failed. A done plan carries its plan_id, verdict,
+        problems, removals to accept, sources put aside and the acknowledgements a start will need; it expires after a
+        while (expires_at). Runs no apt.
+      responses:
+        '200':
+          description: Whether a plan can be made, the job's state and phase, why it failed, and the plan when it is done.
+    post:
+      operationId: startOSUpgradePlan
+      summary: Start working out the upgrade to the next OS release, in a sandbox, without changing the machine.
+      description: >-
+        Starts a background job (up to twenty minutes) that downloads the next release's package lists into a
+        temporary directory and simulates the upgrade there. It replaces any earlier plan at once. A plan made before a
+        refresh (`startOSUpgradeRefresh`) is not accepted by a start, so refresh first when you mean to. Poll
+        `getOSUpgradePlan` until it is done. 202 when a job began, 200 when one already runs, 409 with data.error_code
+        when none can start (not_root, hop_not_planned, identity_unsupported, busy, no_room).
+      responses:
+        '202':
+          description: The state of the plan job.
+  /os/upgrade/reboot:
+    post:
+      operationId: rebootForOSUpgrade
+      summary: Restart the machine that an OS upgrade or refresh is waiting to restart.
+      description: >-
+        Valid only while `getOSUpgradeStatus` lists `reboot` in its actions (awaiting_reboot, reboot_stalled, or a refresh
+        that ended as reboot_first), with no upgrade unit running and the pre-restart checks green. The machine restarts:
+        the box and its apps are unreachable for a few minutes. After it comes back, ReCasaOS checks the new system on its
+        own; poll `getOSUpgradeStatus` until it is succeeded, succeeded_with_findings or failed. Send {} as body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: Always the empty object {}.
+      responses:
+        '202':
+          description: The status of the upgrade, rebooting.
+  /os/upgrade/refresh:
+    post:
+      operationId: startOSUpgradeRefresh
+      summary: Bring the current OS release fully up to date (apt update and dist-upgrade, removing nothing) before planning the upgrade.
+      description: >-
+        Needs the feature switched on and no run open. It installs the pending updates of the current release in the
+        background; it has no point of no return and can be called off with `abortOSUpgrade`. It ends as refreshed, or as
+        reboot_first when the machine needs a restart (then `rebootForOSUpgrade`). Close it with `closeOSUpgradeRun`
+        (acknowledge) and only then make a plan: a plan made before the refresh is refused by a start. Follow it with
+        `getOSUpgradeStatus`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                accept_releaseinfo_change:
+                  type: boolean
+                  description: true to accept a repository whose release information (Origin, Label, Codename) changed; only after a refresh failed with failure.hint releaseinfo_change. false when left out.
+      responses:
+        '202':
+          description: The status of the refresh that began.
+  /os/upgrade/resume:
+    post:
+      operationId: resumeOSUpgrade
+      summary: Go on with an OS upgrade that stopped or was interrupted after its point of no return.
+      description: >-
+        Valid only while `getOSUpgradeStatus` lists `resume` in its actions. Starts a unit that mends what the stop left
+        and runs the remaining blocks, so the machine may then wait for a restart (`rebootForOSUpgrade`). Follow it with
+        `getOSUpgradeStatus`. Send {} as body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: Always the empty object {}.
+      responses:
+        '202':
+          description: The status of the upgrade.
+  /os/upgrade/runbook:
+    get:
+      operationId: getOSUpgradeRunbook
+      summary: The shell text for doing the upgrade to the next OS release by hand at a console, written for this machine.
+      description: >-
+        Written from the current done plan (409 no_plan otherwise). With run=current it is the text of the upgrade run
+        that is open instead, for an owner who took the run over (409 no_run when there is none). It quotes the box's
+        package sources as their files have them, passwords in their addresses included.
+      parameters:
+        - name: run
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - current
+          description: current gives the text of the run that is open, not of the plan.
+      responses:
+        '200':
+          description: The runbook text and the list of its blocks.
+  /os/upgrade/start:
+    post:
+      operationId: startOSUpgrade
+      summary: Start the upgrade of the operating system to its next release, or a reversible rehearsal of it, for a plan the owner has read.
+      description: >-
+        Order: feature on (`setOSUpgradeFeature`), optionally a refresh closed with acknowledge, `startOSUpgradePlan`, then
+        `getOSUpgradePlan` until done; show the owner the plan, then start with its plan_id. The body repeats what the owner
+        accepted, and every value must match the plan or the start is refused (409). The unit runs in the background;
+        past block 5 there is no way back (the machine can be left unbootable), and it ends waiting for a restart
+        (`rebootForOSUpgrade`). With rehearsal true only the reversible half runs and the machine is put back. Follow it with
+        `getOSUpgradeStatus`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - plan_id
+                - hostname
+                - acks
+              properties:
+                plan_id:
+                  type: string
+                  description: The plan_id of the done plan (p1- and 32 hex digits).
+                rehearsal:
+                  type: boolean
+                  description: true runs only the reversible half and puts the machine back; false or absent runs the real upgrade.
+                safety_net:
+                  type: string
+                  enum:
+                    - snapshot
+                    - console_and_backup
+                    - reinstall_ok
+                  description: What the owner says stands between them and a machine that does not come back. Required unless rehearsal is true.
+                hostname:
+                  type: string
+                  description: The machine's name, typed again by the owner; must equal the box's hostname.
+                accept_removals:
+                  type: array
+                  items:
+                    type: string
+                  description: Exactly the packages the plan lists as removals to accept (empty when it lists none).
+                paused_sources:
+                  type: array
+                  items:
+                    type: string
+                  description: Exactly the sources the plan puts aside, as file or sources.list:<line> (empty when none).
+                acks:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - no_interruption
+                      - no_way_back
+                      - sources_paused
+                      - removals_read
+                  description: no_interruption always; no_way_back unless rehearsal; sources_paused when the plan puts sources aside; removals_read when it has removals to accept.
+      responses:
+        '202':
+          description: The status of the upgrade that began.
+  /os/upgrade/status:
+    get:
+      operationId: getOSUpgradeStatus
+      summary: How the operating-system upgrade (or refresh, or rehearsal) is going, and which actions the owner may take now.
+      description: >-
+        Safe to poll every few seconds. actions lists the only buttons valid now (abort, reboot, resume, acknowledge,
+        discard, takeover); pnr says whether the point of no return is behind; ack_word is given when closing needs it.
+        It includes the end of the upgrade unit's output.
+      responses:
+        '200':
+          description: State, block, point of no return, valid actions, checks before the restart, findings after it, failure, and the end of the unit's output.
+  /packages:
+    get:
+      operationId: checkSystemPackageUpdates
+      summary: Check which operating-system packages have updates waiting, Docker's engine shown on its own line.
+      description: >-
+        Runs apt-get update and a simulation, so it takes up to a few minutes. When Docker's engine can be updated, its
+        docker.update.plan_id is what `startDockerUpdate` needs. 409 while a package update runs.
+      responses:
+        '200':
+          description: Whether updates are supported here, the packages with their current and candidate versions, whether a restart is needed, and Docker's line.
+  /packages/update:
+    post:
+      operationId: startSystemPackageUpdate
+      summary: Install the pending operating-system package updates, Docker's engine left out.
+      description: >-
+        Runs apt in the background as root; Docker's packages are held out (409 when the update would touch them). Follow
+        it with `getSystemPackageUpdateStatus`; a restart of the machine may be needed afterwards (reboot_required). 409
+        when an update already runs, another maintenance runs, or there is nothing to update.
+      responses:
+        '200':
+          description: The state of the update that began.
+  /packages/update/status:
+    get:
+      operationId: getSystemPackageUpdateStatus
+      summary: How the operating-system package update is going, or how it went, with its log.
+      responses:
+        '200':
+          description: State, error, exit code, times, whether a restart is needed, and the end of the update's log.
+  /proxy:
+    get:
+      operationId: checkLinkAnswers
+      summary: "Check whether a web address answers, by having the box open it; only the status code comes back."
+      description: "The box itself sends a GET to the address, so it can reach addresses on its own network. Times out after 30 seconds."
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+          description: "An http or https address."
+      responses:
+        '200':
+          description: "No body: the answer's HTTP status is the status the address answered with."
+  /server-info:
+    get:
+      operationId: getServerInfo
+      summary: "Registered without a handler: it does nothing and is not usable."
+      responses:
+        '200':
+          description: "Nothing usable."
+    put:
+      operationId: setServerInfo
+      summary: "Registered without a handler: it does nothing and is not usable."
+      responses:
+        '200':
+          description: "Nothing usable."
+  /ssh-login:
+    post:
+      operationId: checkSshLogin
+      summary: "Check an SSH user name, password and port against the machine's SSH server, for the dashboard's terminal."
+      responses:
+        '200':
+          description: "Whether the SSH login succeeded."
   /state/{state}:
     put:
-      operationId: putSystemState
-      summary: Shut the box down or restart it
+      operationId: setMachinePowerState
+      summary: "Shut down or restart the whole machine."
+      description: "`off` powers the machine off: it stays unreachable until someone turns it on by hand. `restart` reboots it: the dashboard and every app are unreachable for a few minutes. Refused while an operating system upgrade is working on the machine."
       parameters:
         - name: state
           in: path
           required: true
-          description: off shuts the box down, restart reboots it.
           schema:
             type: string
-            enum: [off, restart]
+            enum: ["off", restart]
       responses:
-        '200': {description: ok}
+        '200':
+          description: "The shutdown or restart was asked for and will happen shortly."
+  /stats:
+    get:
+      operationId: listStatsItems
+      summary: "The items whose statistics are kept (the machine), with the latest processor and memory reading and the number of firing alerts."
+      responses:
+        '200':
+          description: "items (id, name, kind, state, started_at, cpu_percent, memory_used, memory_limit, alerts)."
+  /stats/{id}:
+    get:
+      operationId: getStatsSeries
+      summary: "The machine's processor and memory history over a chosen period, for charts."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [host]
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [live, 15m, 1h, 24h, 7d]
+            default: live
+      responses:
+        '200':
+          description: "The series of the period (step, from, to, points with avg/min/max) and the scale (cpu as percent of one core, memory limit)."
+  /stats/{id}/alerts:
+    get:
+      operationId: getStatsAlertRules
+      summary: "The machine's high-processor and high-memory alert rules, and which of them are firing now."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [host]
+      responses:
+        '200':
+          description: "rules (key, enabled, threshold, minutes) and active alerts (key, since, value)."
+    put:
+      operationId: setStatsAlertRules
+      summary: "Change the machine's high-processor or high-memory alert rule: on or off, threshold and duration."
+      description: "Only the rules listed change; the other keeps its settings. Each listed rule must carry all four fields."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [host]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules]
+              properties:
+                rules:
+                  type: array
+                  items:
+                    type: object
+                    required: [key, enabled, threshold, minutes]
+                    properties:
+                      key:
+                        type: string
+                        enum: [cpu_high, mem_high]
+                      enabled:
+                        type: boolean
+                      threshold:
+                        type: number
+                        minimum: 1
+                        maximum: 100
+                        description: "Percentage of processor or memory use."
+                      minutes:
+                        type: integer
+                        minimum: 1
+                        maximum: 120
+                        description: "How many minutes above the threshold before the alert fires."
+      responses:
+        '200':
+          description: "The rules and active alerts after the change."
+  /stop:
+    post:
+      operationId: restartCore
+      summary: "Stop the ReCasaOS core service; the system starts it again a few seconds later."
+      description: "The dashboard loses its connection for several seconds while the core restarts. Any operating system upgrade plan being made is cancelled first."
+      responses:
+        '200':
+          description: "Usually no answer: the core exits before replying."
+  /telemetry:
+    get:
+      operationId: getTelemetry
+      summary: "Whether anonymous usage statistics are on, whether the owner saw the notice, and exactly what would be sent."
+      responses:
+        '200':
+          description: "enabled, notice_seen and the heartbeat preview (event and properties)."
+    put:
+      operationId: setTelemetry
+      summary: "Turn anonymous usage statistics on or off, or mark their notice as seen."
+      description: "Both fields are optional; a field left out keeps its value."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                notice_seen:
+                  type: boolean
+      responses:
+        '200':
+          description: "The new state, as getTelemetry answers it."
+  /update:
+    post:
+      operationId: updateReCasaOS
+      summary: Update ReCasaOS to the newest version its update channel offers.
+      description: >-
+        Does nothing when ReCasaOS is already up to date. Otherwise it runs the installer for that version: ReCasaOS's
+        services restart and the dashboard is unreachable for a minute or two. 409 when another maintenance runs.
+      responses:
+        '200':
+          description: Success once the update was started (or when there was nothing to update).
+  /update-channel:
+    get:
+      operationId: getUpdateChannel
+      summary: Which updates the box offers when updating by hand, releases only or pre-releases too.
+      responses:
+        '200':
+          description: data.channel, release or prerelease.
+    put:
+      operationId: setUpdateChannel
+      summary: Choose whether updating ReCasaOS by hand offers releases only or pre-releases too.
+      description: >-
+        Changes only what the update button (`updateReCasaOS`) offers; the nightly automatic update installs releases
+        only, whatever the channel.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - channel
+              properties:
+                channel:
+                  type: string
+                  enum:
+                    - release
+                    - prerelease
+      responses:
+        '200':
+          description: data.channel, the channel now followed.
+  /utilization:
+    get:
+      operationId: getSystemUtilization
+      summary: "How loaded the machine is right now: processor, memory, network and system disk."
+      responses:
+        '200':
+          description: "cpu (percent, cores, temperature, power, frequency, model), mem, net per interface, and the disk and USB figures the storage service reports."
+  /version:
+    get:
+      operationId: getReCasaOSVersion
+      summary: "The installed ReCasaOS version, the newest one offered on the box's update channel, and whether an update is available."
+      description: "Same answer as `checkReCasaOSVersion`. The newest version is cached for 20 minutes; `refresh` looks again now (at most once per 30 seconds for the whole box)."
+      parameters:
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Any non-empty value (e.g. 1) bypasses the cache."
+      responses:
+        '200':
+          description: "current_version, need_update, version (the newest offered) and channel."
+  /version/check:
+    get:
+      operationId: checkReCasaOSVersion
+      summary: "The installed ReCasaOS version, the newest one offered on the box's update channel, and whether an update is available."
+      description: "The newest version is cached for 20 minutes; `refresh` looks again now (at most once per 30 seconds for the whole box)."
+      parameters:
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Any non-empty value (e.g. 1) bypasses the cache."
+      responses:
+        '200':
+          description: "current_version, need_update, version (the newest offered) and channel."
+  /version/current:
+    get:
+      operationId: getReCasaOSCurrentVersion
+      summary: "The installed ReCasaOS core version, as plain text."
+      responses:
+        '200':
+          description: "The version number as text."
+  /wsssh:
+    get:
+      operationId: openSshTerminal
+      summary: "A websocket that opens an interactive SSH terminal on the machine, for the dashboard."
+      responses:
+        '200':
+          description: "Not a JSON answer: the connection is upgraded to a websocket terminal."

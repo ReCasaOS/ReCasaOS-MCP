@@ -214,6 +214,58 @@
 "GET /v2/vuln_scan/status": read # whether a scan runs and when the last one ended
 
 # --- system (v1) ---
-"GET /v1/sys/utilization": read # CPU, memory and network use right now
-"PUT /v1/sys/update-channel": change # chooses whether manual updates offer pre-releases
-"PUT /v1/sys/state/{state}": danger # shuts the box down or restarts it
+"GET /v1/sys/alerts": secret # push alert channels and settings
+"PUT /v1/sys/alerts": change # change alert channels, categories, disk threshold
+"POST /v1/sys/alerts/test": change # send a test alert to the channels
+"GET /v1/sys/autoupdate": read # nightly automatic updates, settings and state
+"PUT /v1/sys/autoupdate": change # turn nightly automatic updates on or off, set their window
+"GET /v1/sys/debug": secret # bug-report text about the system
+"GET /v1/sys/docker/containers": read # containers a Docker update would stop
+"POST /v1/sys/docker/update": danger # update the Docker engine, stops every app
+"GET /v1/sys/docker/update/status": secret # progress of the Docker update, with its log
+"GET /v1/sys/entry": read # the dashboard modules' entries
+"GET /v1/sys/feeds": secret # footer news feeds and headlines
+"PUT /v1/sys/feeds": change # set the footer news feeds
+"GET /v1/sys/hardware": read # board model and architecture
+"GET /v1/sys/logs": secret # the core's log file
+"GET /v1/sys/modules": read # add-on modules available and installed
+"POST /v1/sys/modules/{name}/install": danger # install or update an add-on module
+"POST /v1/sys/modules/{name}/plan": read # check a module install without changing anything
+"POST /v1/sys/modules/{name}/remove": danger # remove an add-on module
+"GET /v1/sys/modules/{name}/status": read # progress of a module's install or removal
+"GET /v1/sys/os": read # operating system and its support dates
+"GET /v1/sys/os/readiness": read # whether the OS could be upgraded now
+"POST /v1/sys/os/upgrade/abort": danger # call off an OS upgrade before its point of no return
+"POST /v1/sys/os/upgrade/ack": danger # close, drop or hand over an OS upgrade run
+"POST /v1/sys/os/upgrade/beta": danger # switch the OS upgrade feature on or off
+"GET /v1/sys/os/upgrade/plan": read # the plan of the OS upgrade
+"POST /v1/sys/os/upgrade/plan": change # start planning the OS upgrade in a sandbox
+"POST /v1/sys/os/upgrade/reboot": danger # restart the machine for the OS upgrade
+"POST /v1/sys/os/upgrade/refresh": danger # bring the current OS release up to date
+"POST /v1/sys/os/upgrade/resume": danger # go on with a stopped OS upgrade
+"GET /v1/sys/os/upgrade/runbook": secret # shell text to upgrade the OS by hand
+"POST /v1/sys/os/upgrade/start": danger # start the OS upgrade or its rehearsal
+"GET /v1/sys/os/upgrade/status": secret # progress of the OS upgrade, with its output
+"GET /v1/sys/packages": change # check for system package updates (runs apt-get update)
+"POST /v1/sys/packages/update": danger # install system package updates
+"GET /v1/sys/packages/update/status": secret # progress of the package update, with its log
+"GET /v1/sys/proxy": never # the box fetches an address the caller gives: not offered
+"GET /v1/sys/server-info": never # no handler
+"PUT /v1/sys/server-info": never # no handler
+"POST /v1/sys/ssh-login": never # check an SSH password
+"PUT /v1/sys/state/{state}": danger # shut down or restart the machine
+"GET /v1/sys/stats": read # measured items and latest readings
+"GET /v1/sys/stats/{id}": read # processor and memory history
+"GET /v1/sys/stats/{id}/alerts": read # high processor and memory alert rules
+"PUT /v1/sys/stats/{id}/alerts": change # change high processor and memory alert rules
+"POST /v1/sys/stop": danger # restart the ReCasaOS core service
+"GET /v1/sys/telemetry": read # anonymous statistics state and preview
+"PUT /v1/sys/telemetry": change # turn anonymous statistics on or off
+"POST /v1/sys/update": danger # update ReCasaOS to the newest version
+"GET /v1/sys/update-channel": read # update channel, releases or pre-releases
+"PUT /v1/sys/update-channel": change # choose releases or pre-releases for manual updates
+"GET /v1/sys/utilization": read # how loaded the machine is
+"GET /v1/sys/version": read # installed and newest ReCasaOS version
+"GET /v1/sys/version/check": read # installed and newest ReCasaOS version
+"GET /v1/sys/version/current": read # installed ReCasaOS version
+"GET /v1/sys/wsssh": never # interactive SSH terminal websocket
