@@ -1,0 +1,2 @@
+# Embedded actions that testdata/routes.txt does not list yet (the list is older than the core).
+PUT /v1/sys/update-channel

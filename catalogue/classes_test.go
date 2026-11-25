@@ -60,6 +60,35 @@ func described(t *testing.T) map[string]service.Action {
 	return out
 }
 
+// embeddedActions returns every action of the embedded descriptions, by id.
+func embeddedActions(t *testing.T) map[string]service.Action {
+	t.Helper()
+	out := map[string]service.Action{}
+	for name, raw := range catalogue.Embedded() {
+		as, err := service.ParseActions(raw)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, a := range as {
+			if _, dup := out[a.ID]; dup {
+				t.Fatalf("%s: %s is described twice", name, a.ID)
+			}
+			out[a.ID] = a
+		}
+	}
+	return out
+}
+
+// everyDescribed is the box's descriptions and the embedded ones.
+func everyDescribed(t *testing.T) map[string]service.Action {
+	t.Helper()
+	out := described(t)
+	for id, a := range embeddedActions(t) {
+		out[id] = a
+	}
+	return out
+}
+
 var ownRoutes = []string{
 	"POST /v2/mcp/server", "GET /v2/mcp/status", "GET /v2/mcp/tokens", "POST /v2/mcp/tokens",
 	"DELETE /v2/mcp/tokens/{id}", "POST /v1/users/internal/access-token",
@@ -89,7 +118,7 @@ func TestEveryDescribedActionIsClassedOrCounted(t *testing.T) {
 
 func TestNoClassWithoutARoute(t *testing.T) {
 	known := map[string]bool{}
-	for id := range described(t) {
+	for id := range everyDescribed(t) {
 		known[id] = true
 	}
 	for _, l := range lines(t, "../testdata/routes.txt") {
@@ -107,7 +136,7 @@ func TestNoClassWithoutARoute(t *testing.T) {
 
 func TestEveryRouteIsDescribedOrListedUncovered(t *testing.T) {
 	desc := map[string]bool{}
-	for id := range described(t) {
+	for id := range everyDescribed(t) {
 		desc[norm(id)] = true
 	}
 	routes := map[string]bool{}
@@ -194,14 +223,15 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 	}
 }
 
-// A deliberate, visible edit is needed to change the class of any described action.
+// A deliberate, visible edit is needed to change the class of any described action,
+// the box's and the embedded ones alike.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 58, catalogue.Secret: 22, catalogue.Change: 61, catalogue.Danger: 29, catalogue.Never: 16,
+		catalogue.Read: 59, catalogue.Secret: 22, catalogue.Change: 62, catalogue.Danger: 30, catalogue.Never: 16,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
-	for id := range described(t) {
+	for id := range everyDescribed(t) {
 		got[classes[id]]++
 	}
 	for c, n := range want {

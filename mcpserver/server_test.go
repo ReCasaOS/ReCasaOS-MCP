@@ -71,6 +71,9 @@ var testClasses = map[string]catalogue.Class{
 	"POST /v2/app_management/apps":        catalogue.Change,
 	"DELETE /v2/app_management/apps/{id}": catalogue.Danger,
 	"GET /v2/app_management/hidden":       catalogue.Never,
+	"GET /v1/sys/utilization":             catalogue.Read,
+	"PUT /v1/sys/update-channel":          catalogue.Change,
+	"PUT /v1/sys/state/{state}":           catalogue.Danger,
 }
 
 // fixture is the endpoint in front of a fake Gateway and a fake accounts service.
@@ -804,7 +807,62 @@ func TestStatusCountsActions(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(got.Actions) != "map[change:1 danger:1 read:2 secret:1]" || got.Unclassified != 1 || got.Tokens != 1 {
+	if fmt.Sprint(got.Actions) != "map[change:2 danger:2 read:3 secret:1]" || got.Unclassified != 1 || got.Tokens != 1 {
 		t.Fatalf("%s", rec.Body)
+	}
+}
+
+func TestReadTokenDoesNotSeeAnEmbeddedDangerAction(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelRead, 7)
+	cs := f.connect(plain)
+	const id = "PUT /v1/sys/state/{state}"
+	if text, _ := call(t, cs, "search_actions", map[string]any{"query": "shut down the box"}); strings.Contains(text, id) {
+		t.Fatal(text)
+	}
+	for _, tool := range []string{"read", "describe_action"} {
+		if text, isErr := call(t, cs, tool, map[string]any{"action": id}); !isErr || text != unknownText(id) {
+			t.Fatalf("%s: %s", tool, text)
+		}
+	}
+	if f.actionHits.Load() != 0 {
+		t.Fatal("the box was called")
+	}
+}
+
+// Before any description of the box is read, an embedded action is found and an other one is not loaded yet.
+func TestEmbeddedActionIsFoundBeforeTheBoxDescriptionsLoad(t *testing.T) {
+	f := newFixture(t)
+	f.setStatus(7, http.StatusInternalServerError)
+	plain, _ := f.token(service.LevelFull, 7)
+	cs := f.connect(plain)
+	if text, isErr := call(t, cs, "describe_action", map[string]any{"action": "GET /v1/sys/utilization"}); isErr || !strings.Contains(text, `"tool":"read"`) {
+		t.Fatalf("%s", text)
+	}
+	if text, isErr := call(t, cs, "describe_action", map[string]any{"action": "GET /v2/app_management/apps"}); !isErr || text != notLoaded {
+		t.Fatalf("%s", text)
+	}
+}
+
+func TestEmbeddedActionOnAnOlderBoxIsTheBoxes404(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	f.setAction("PUT /v1/sys/update-channel", func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
+	text, isErr := call(t, f.connect(plain), "change", map[string]any{"action": "PUT /v1/sys/update-channel", "body": map[string]any{"channel": "release"}})
+	if !isErr || !strings.HasPrefix(text, `{"status":404,`) {
+		t.Fatal(text)
+	}
+}
+
+func TestEmbeddedActionIsNotRetried(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	f.setAction("PUT /v1/sys/update-channel", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) })
+	text, isErr := call(t, f.connect(plain), "change", map[string]any{"action": "PUT /v1/sys/update-channel", "body": map[string]any{"channel": "release"}})
+	if !isErr || !strings.HasPrefix(text, `{"status":500,`) {
+		t.Fatal(text)
+	}
+	if n := f.actionHits.Load(); n != 1 {
+		t.Fatalf("the box received %d requests, want 1", n)
 	}
 }

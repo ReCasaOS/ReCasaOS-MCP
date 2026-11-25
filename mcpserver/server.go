@@ -183,11 +183,8 @@ func (r *refresher) refresh(done chan struct{}, account int) {
 	cancel()
 	logRefresh(err)
 	// a source that fails does not make the others unloaded
-	byClass, unclassified := r.cat.Counts()
-	some := unclassified > 0
-	for _, n := range byClass {
-		some = some || n > 0
-	}
+	// the embedded actions are always there: only the box's own descriptions count as loaded
+	some := r.cat.HasBoxActions()
 
 	r.mu.Lock()
 	r.loaded = r.loaded || err == nil || some

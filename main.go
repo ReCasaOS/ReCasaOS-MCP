@@ -119,6 +119,9 @@ func main() {
 	identity := service.NewIdentity(config.CommonInfo.RuntimePath)
 	box := service.NewBox(config.CommonInfo.RuntimePath, service.DefaultGatewayINI, identity)
 	actions := service.NewCatalogue(box)
+	for _, err := range actions.EmbeddedErrors() {
+		logger.Error("an embedded description of the box's API was refused", zap.Error(err))
+	}
 	journal := service.NewJournal(filepath.Join(config.AppInfo.LogPath, "mcp-calls.log"))
 	defer journal.Close()
 

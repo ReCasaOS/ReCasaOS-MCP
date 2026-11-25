@@ -152,7 +152,6 @@ GET /v1/sys/proxy
 GET /v1/sys/server-info
 PUT /v1/sys/server-info
 POST /v1/sys/ssh-login
-PUT /v1/sys/state/:state
 GET /v1/sys/stats
 GET /v1/sys/stats/:id
 GET /v1/sys/stats/:id/alerts
@@ -161,7 +160,6 @@ POST /v1/sys/stop
 GET /v1/sys/telemetry
 PUT /v1/sys/telemetry
 POST /v1/sys/update
-GET /v1/sys/utilization
 GET /v1/sys/version
 GET /v1/sys/version/check
 GET /v1/sys/version/current

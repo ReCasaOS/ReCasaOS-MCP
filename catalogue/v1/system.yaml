@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: System (v1)
+  version: '1'
+servers:
+  - url: /v1/sys
+paths:
+  /utilization:
+    get:
+      operationId: getSystemUtilization
+      summary: Show the box's CPU, memory and network use right now
+      responses:
+        '200': {description: ok}
+  /update-channel:
+    put:
+      operationId: putUpdateChannel
+      summary: Choose whether manual updates offer pre-releases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel:
+                  type: string
+                  enum: [release, prerelease]
+      responses:
+        '200': {description: ok}
+  /state/{state}:
+    put:
+      operationId: putSystemState
+      summary: Shut the box down or restart it
+      parameters:
+        - name: state
+          in: path
+          required: true
+          description: off shuts the box down, restart reboots it.
+          schema:
+            type: string
+            enum: [off, restart]
+      responses:
+        '200': {description: ok}

@@ -212,3 +212,8 @@
 "GET /v2/vuln_scan/apps/{app}": read # the vulnerabilities of one app, image by image
 "POST /v2/vuln_scan/scan": change # starts a vulnerability scan now
 "GET /v2/vuln_scan/status": read # whether a scan runs and when the last one ended
+
+# --- system (v1) ---
+"GET /v1/sys/utilization": read # CPU, memory and network use right now
+"PUT /v1/sys/update-channel": change # chooses whether manual updates offer pre-releases
+"PUT /v1/sys/state/{state}": danger # shuts the box down or restarts it
