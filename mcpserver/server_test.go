@@ -866,3 +866,58 @@ func TestEmbeddedActionIsNotRetried(t *testing.T) {
 		t.Fatalf("the box received %d requests, want 1", n)
 	}
 }
+
+func TestSearchFindsEmbeddedActionsBeforeTheBoxLoads(t *testing.T) {
+	f := newFixture(t)
+	f.setStatus(7, http.StatusInternalServerError)
+	for level, wantOnly := range map[service.Level]bool{service.LevelFull: false, service.LevelRead: true} {
+		plain, _ := f.token(level, 7)
+		cs := f.connect(plain)
+		text, isErr := call(t, cs, "search_actions", map[string]any{"query": "utilization"})
+		var got struct {
+			Actions []map[string]string
+			Note    string
+		}
+		if err := json.Unmarshal([]byte(text), &got); err != nil || isErr {
+			t.Fatalf("%s: %v %s", level, err, text)
+		}
+		if len(got.Actions) != 1 || got.Actions[0]["action"] != "GET /v1/sys/utilization" || got.Note != notLoadedNote {
+			t.Fatalf("%s: %s", level, text)
+		}
+		// the danger and change samples: a full token finds them, a read token never
+		text, _ = call(t, cs, "search_actions", map[string]any{"query": "state update-channel"})
+		if sees := strings.Contains(text, "PUT /v1/sys/"); sees == wantOnly {
+			t.Fatalf("%s sees them: %v: %s", level, sees, text)
+		}
+	}
+	if n := f.gatewayHits.Load(); n != 0 {
+		t.Fatalf("%d requests reached the Gateway", n)
+	}
+}
+
+func TestReadTokenDoesNotSeeAnEmbeddedDangerActionBeforeTheBoxLoads(t *testing.T) {
+	f := newFixture(t)
+	f.setStatus(7, http.StatusInternalServerError)
+	plain, _ := f.token(service.LevelRead, 7)
+	if text, isErr := call(t, f.connect(plain), "read", map[string]any{"action": "PUT /v1/sys/state/{state}"}); !isErr || text != notLoaded {
+		t.Fatal(text)
+	}
+}
+
+func TestSearchWithNoHitBeforeTheBoxLoadsSaysNotLoaded(t *testing.T) {
+	f := newFixture(t)
+	f.setStatus(7, http.StatusInternalServerError)
+	plain, _ := f.token(service.LevelFull, 7)
+	if text, isErr := call(t, f.connect(plain), "search_actions", map[string]any{"query": "zzzzz"}); !isErr || text != notLoaded {
+		t.Fatal(text)
+	}
+}
+
+func TestSearchAfterLoadHasNoNote(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	text, isErr := call(t, f.connect(plain), "search_actions", map[string]any{"query": "utilization"})
+	if isErr || strings.Contains(text, "note") || !strings.HasPrefix(text, `[{"action":"GET /v1/sys/utilization"`) {
+		t.Fatal(text)
+	}
+}
