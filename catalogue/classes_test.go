@@ -219,6 +219,8 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 		"GET /v1/sys/os/upgrade/runbook",
 		"GET /v1/sys/os/upgrade/status",
 		"GET /v1/sys/packages/update/status",
+		"GET /v1/sys/os/upgrade/plan",
+		"GET /v1/sys/modules/{name}/status",
 	}
 	classes := catalogue.Classes()
 	for _, id := range known {
@@ -235,7 +237,7 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 // the box's and the embedded ones alike. 186 are described by the box, 55 by v1/system.yaml.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 77, catalogue.Secret: 30, catalogue.Change: 70, catalogue.Danger: 43, catalogue.Never: 21,
+		catalogue.Read: 75, catalogue.Secret: 32, catalogue.Change: 70, catalogue.Danger: 43, catalogue.Never: 21,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
@@ -289,6 +291,8 @@ func TestSystemPowerAndUpdatesAreDanger(t *testing.T) {
 		"POST /v1/sys/os/upgrade/reboot",
 		"POST /v1/sys/os/upgrade/resume",
 		"POST /v1/sys/os/upgrade/abort",
+		"POST /v1/sys/os/upgrade/refresh",
+		"POST /v1/sys/os/upgrade/ack",
 	} {
 		if classes[id] != catalogue.Danger {
 			t.Errorf("%s is %q, want danger", id, classes[id])

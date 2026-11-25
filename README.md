@@ -79,8 +79,8 @@ is not offered at all.** Today 241 actions are classed:
 
 | Class | Count | Meaning | Who gets it |
 |---|---|---|---|
-| `read` | 77 | only looks, and answers with nothing private | every token |
-| `secret` | 30 | reads something that can carry a secret | Everything |
+| `read` | 75 | only looks, and answers with nothing private | every token |
+| `secret` | 32 | reads something that can carry a secret | Everything |
 | `change` | 70 | alters the box | Everything |
 | `danger` | 43 | can lose data or lock someone out | Everything, through `destroy` |
 | `never` | 21 | not offered to any assistant | nobody |

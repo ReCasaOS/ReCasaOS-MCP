@@ -232,13 +232,13 @@
 "POST /v1/sys/modules/{name}/install": danger # install or update an add-on module
 "POST /v1/sys/modules/{name}/plan": read # check a module install without changing anything
 "POST /v1/sys/modules/{name}/remove": danger # remove an add-on module
-"GET /v1/sys/modules/{name}/status": read # progress of a module's install or removal
+"GET /v1/sys/modules/{name}/status": secret # where a module's install or removal stands (with the end of its output)
 "GET /v1/sys/os": read # operating system and its support dates
 "GET /v1/sys/os/readiness": read # whether the OS could be upgraded now
 "POST /v1/sys/os/upgrade/abort": danger # call off an OS upgrade before its point of no return
 "POST /v1/sys/os/upgrade/ack": danger # close, drop or hand over an OS upgrade run
 "POST /v1/sys/os/upgrade/beta": danger # switch the OS upgrade feature on or off
-"GET /v1/sys/os/upgrade/plan": read # the plan of the OS upgrade
+"GET /v1/sys/os/upgrade/plan": secret # the plan of the OS upgrade (it quotes the lines of the package sources)
 "POST /v1/sys/os/upgrade/plan": change # start planning the OS upgrade in a sandbox
 "POST /v1/sys/os/upgrade/reboot": danger # restart the machine for the OS upgrade
 "POST /v1/sys/os/upgrade/refresh": danger # bring the current OS release up to date

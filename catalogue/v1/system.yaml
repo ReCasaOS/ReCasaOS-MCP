@@ -15,7 +15,7 @@ paths:
     put:
       operationId: setAlertSettings
       summary: "Change the push alerts: the channels they go to, which categories are on, and the disk-full threshold."
-      description: "Every field is optional; a field left out keeps its value. `channels` REPLACES the whole list: a channel left out is deleted. To keep an existing channel unchanged send its `id` with no `url` (call `getAlertSettings` first for the ids). A new channel needs a `url`."
+      description: "Every field is optional; a field left out keeps its value. `channels` REPLACES the whole list: a channel left out is deleted. To keep an existing channel send its `id` and its `name`, with no `url` (call `getAlertSettings` first for the ids). A new channel needs a `url`."
       requestBody:
         required: true
         content:
@@ -206,7 +206,7 @@ paths:
       summary: "What the machine is: its board or model name and its processor architecture."
       responses:
         '200':
-          description: "drive_model (the device-tree model, often empty on a PC) and arch."
+          description: "drive_model (the device-tree model, often empty on a PC) and arch. The answer can be empty when the processor's information cannot be read."
   /logs:
     get:
       operationId: getCoreLog
