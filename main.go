@@ -34,9 +34,6 @@ var (
 	commit = "private build"
 	date   = "private build"
 
-	//go:embed api/index.html
-	_docHTML string
-
 	//go:embed api/mcp/openapi.yaml
 	_docYAML string
 
@@ -134,7 +131,7 @@ func main() {
 				Identity:  identity,
 				LANURL:    func() (string, bool) { return service.LANURL(service.DefaultGatewayINI) },
 			}),
-			"doc": route.InitV2DocRouter(_docHTML, _docYAML),
+			"doc": route.InitV2DocRouter(_docYAML),
 		},
 	}
 
