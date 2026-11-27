@@ -886,7 +886,7 @@ paths:
       description: "The values of the inputs (keys, passwords) are never answered, only whether each is set."
       responses:
         '200':
-          description: "widgets: per widget, id, base (the address read), insecure_tls, recipe (name, icon, path, query, headers, inputs, layout, rows, status, refresh), inputs_set per input, and the error of its last read when it failed."
+          description: "widgets: per widget, id, base (the address read), insecure_tls, recipe (recasaos_widget, name, icon, path, query, headers, basic, inputs, base_hint, layout, rows, status, refresh), inputs_set per input, and the error of its last read when it failed. A recipe's headers, query and basic may hold fixed texts the owner typed; the values of the inputs are never answered."
   /widgets/{id}/card:
     get:
       operationId: getApiWidgetCard
