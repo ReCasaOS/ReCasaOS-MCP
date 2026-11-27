@@ -221,6 +221,8 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 		"GET /v1/sys/packages/update/status",
 		"GET /v1/sys/os/upgrade/plan",
 		"GET /v1/sys/modules/{name}/status",
+		"GET /v1/sys/widgets",
+		"GET /v1/sys/widgets/{id}/card",
 	}
 	classes := catalogue.Classes()
 	for _, id := range known {
@@ -234,10 +236,10 @@ func TestKnownSecretsAreNotRead(t *testing.T) {
 }
 
 // A deliberate, visible edit is needed to change the class of any described action,
-// the box's and the embedded ones alike. 186 are described by the box, 55 by v1/system.yaml.
+// the box's and the embedded ones alike. 186 are described by the box, 57 by v1/system.yaml.
 func TestClassCounts(t *testing.T) {
 	want := map[catalogue.Class]int{
-		catalogue.Read: 75, catalogue.Secret: 32, catalogue.Change: 70, catalogue.Danger: 43, catalogue.Never: 21,
+		catalogue.Read: 75, catalogue.Secret: 34, catalogue.Change: 70, catalogue.Danger: 43, catalogue.Never: 21,
 	}
 	got := map[catalogue.Class]int{}
 	classes := catalogue.Classes()
@@ -305,6 +307,56 @@ func TestTerminalAndFetchAreNever(t *testing.T) {
 	for _, id := range []string{"GET /v1/sys/wsssh", "POST /v1/sys/ssh-login", "GET /v1/sys/proxy"} {
 		if classes[id] != catalogue.Never {
 			t.Errorf("%s is %q, want never", id, classes[id])
+		}
+	}
+}
+
+// reaches says whether a described action could be made into a route: same method,
+// and segment by segment the same text or a parameter.
+func reaches(action, route string) bool {
+	a, r := strings.Split(norm(action), "/"), strings.Split(norm(route), "/")
+	if len(a) != len(r) {
+		return false
+	}
+	for i := range a {
+		if a[i] != r[i] && a[i] != "{}" && r[i] != "{}" {
+			return false
+		}
+	}
+	return true
+}
+
+// The API widgets of the dashboard: an AI client reads the list and a card, both
+// secret (addresses on the owner's network, and what the owner's services answer).
+// What creates, changes, removes, tries or previews a widget would let it make the
+// box read an address of its choosing: these five routes get no description and no
+// class, and an action without both is not offered.
+func TestAPIWidgetsAreOnlyRead(t *testing.T) {
+	classes := catalogue.Classes()
+	emb := embeddedActions(t)
+	for _, id := range []string{"GET /v1/sys/widgets", "GET /v1/sys/widgets/{id}/card"} {
+		if _, ok := emb[id]; !ok {
+			t.Errorf("%s is not described", id)
+		}
+		if classes[id] != catalogue.Secret {
+			t.Errorf("%s is %q, want secret", id, classes[id])
+		}
+	}
+	all := everyDescribed(t)
+	for _, route := range []string{
+		"POST /v1/sys/widgets",
+		"PUT /v1/sys/widgets/{id}",
+		"DELETE /v1/sys/widgets/{id}",
+		"POST /v1/sys/widgets/test",
+		"POST /v1/sys/widgets/preview",
+	} {
+		if c, ok := classes[route]; ok {
+			t.Errorf("%s has the class %q: it must have none", route, c)
+		}
+		for id := range all {
+			if reaches(id, route) {
+				t.Errorf("%s is described, by %s: an AI client must not write, try or preview a widget", route, id)
+			}
 		}
 	}
 }

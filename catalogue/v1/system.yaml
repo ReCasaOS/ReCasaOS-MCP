@@ -879,6 +879,32 @@ paths:
       responses:
         '200':
           description: "The version number as text."
+  /widgets:
+    get:
+      operationId: listApiWidgets
+      summary: "The API widgets of the dashboard: for each, the address the box reads, its recipe and whether each of its inputs is filled."
+      description: "The values of the inputs (keys, passwords) are never answered, only whether each is set."
+      responses:
+        '200':
+          description: "widgets: per widget, id, base (the address read), insecure_tls, recipe (name, icon, path, query, headers, inputs, layout, rows, status, refresh), inputs_set per input, and the error of its last read when it failed."
+  /widgets/{id}/card:
+    get:
+      operationId: getApiWidgetCard
+      summary: "The card of one API widget of the dashboard: what its recipe shows of the answer of the address it reads."
+      description: "The box reads the address the owner set for the widget and keeps the card for the recipe's `refresh` seconds (60 seconds after a read that failed); within that time the card kept is answered. A read that failed still answers 200: `error` says why and there is no row."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9]{8}$"
+          description: "The widget's id, as listApiWidgets gives it."
+      responses:
+        '200':
+          description: "title, icon, layout, status (value, level), rows (label, value, level, bar from 0 to 100), more (rows left out), link, refresh and error. A value has a kind (text, number, bytes, percent, duration, date or missing) with its text or its number and unit."
+        '404':
+          description: "No widget has this id."
   /wsssh:
     get:
       operationId: openSshTerminal
