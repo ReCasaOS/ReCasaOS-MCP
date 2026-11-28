@@ -86,12 +86,12 @@ dashboard: the box's own rules judge it.
 
 Each action of the box's API carries a class in [`catalogue/classes.yaml`](catalogue/classes.yaml),
 written after reading what the action does and what it answers. **An action without a class
-is not offered at all.** Today 241 actions are classed:
+is not offered at all.** Today 243 actions are classed:
 
 | Class | Count | Meaning | Who gets it |
 |---|---|---|---|
 | `read` | 75 | only looks, and answers with nothing private | every token |
-| `secret` | 32 | reads something that can carry a secret | Everything |
+| `secret` | 34 | reads something that can carry a secret | Everything |
 | `change` | 70 | alters the box | Everything |
 | `danger` | 43 | can lose data or lock someone out | Everything, through `destroy` |
 | `never` | 21 | not offered to any assistant | nobody |

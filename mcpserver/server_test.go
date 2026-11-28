@@ -807,7 +807,7 @@ func TestStatusCountsActions(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(got.Actions) != "map[change:2 danger:2 read:3 secret:1]" || got.Unclassified != 53 || got.Tokens != 1 { // 53 = the fixture's /unknown + the 52 embedded system actions its testClasses leaves out
+	if fmt.Sprint(got.Actions) != "map[change:2 danger:2 read:3 secret:1]" || got.Unclassified != 55 || got.Tokens != 1 { // 55 = the fixture's /unknown + the 54 embedded system actions its testClasses leaves out
 		t.Fatalf("%s", rec.Body)
 	}
 }
@@ -919,5 +919,31 @@ func TestSearchAfterLoadHasNoNote(t *testing.T) {
 	text, isErr := call(t, f.connect(plain), "search_actions", map[string]any{"query": "utilization"})
 	if isErr || strings.Contains(text, "note") || !strings.HasPrefix(text, `[{"action":"GET /v1/sys/utilization"`) {
 		t.Fatal(text)
+	}
+}
+
+// A route the catalogue does not describe is reached by no tool: the id is unknown
+// and the box is not called. Named here, what writes, tries or previews an API widget.
+func TestNoToolReachesAnAPIWidgetWrite(t *testing.T) {
+	f := newFixture(t)
+	plain, _ := f.token(service.LevelFull, 7)
+	cs := f.connect(plain)
+	for _, id := range []string{
+		"POST /v1/sys/widgets",
+		"PUT /v1/sys/widgets/{id}",
+		"PUT /v1/sys/widgets/abcdefgh",
+		"DELETE /v1/sys/widgets/{id}",
+		"DELETE /v1/sys/widgets/abcdefgh",
+		"POST /v1/sys/widgets/test",
+		"POST /v1/sys/widgets/preview",
+	} {
+		for _, tool := range []string{"describe_action", "read", "change", "destroy"} {
+			if text, isErr := call(t, cs, tool, map[string]any{"action": id}); !isErr || text != unknownText(id) {
+				t.Errorf("%s through %s: %s", id, tool, text)
+			}
+		}
+	}
+	if f.actionHits.Load() != 0 {
+		t.Fatal("the box was called")
 	}
 }

@@ -98,3 +98,39 @@ func TestAnInvalidEmbeddedFileIsRefusedWhole(t *testing.T) {
 		}
 	}
 }
+
+// With the real descriptions and classes: of the API widgets, the list and a card are
+// offered, to a full token only, and nothing else is.
+func TestAPIWidgetsOfferOnlyTheTwoReads(t *testing.T) {
+	c := newCatalogueWith(fakeBox{}, catalogue.Classes(), catalogue.Embedded())
+	if errs := c.EmbeddedErrors(); len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	const list, card = "GET /v1/sys/widgets", "GET /v1/sys/widgets/{id}/card"
+	if got := ids(c.Search("widgets", LevelFull, 50)); got != list+","+card {
+		t.Fatalf("a full token finds %q", got)
+	}
+	if got := ids(c.Search("widgets", LevelRead, 50)); got != "" {
+		t.Fatalf("a read token finds %q", got)
+	}
+	for _, id := range []string{list, card} {
+		if a, _ := c.Get(id); a.Class != catalogue.Secret {
+			t.Errorf("%s is %q, want secret", id, a.Class)
+		}
+	}
+	a, _ := c.Get(card)
+	if path, _, _, err := BuildRequest(a, map[string]any{"id": "abcdefgh"}, nil); err != nil || path != "/v1/sys/widgets/abcdefgh/card" {
+		t.Errorf("the card is asked at %q (%v)", path, err)
+	}
+	for _, id := range []string{
+		"POST /v1/sys/widgets",
+		"PUT /v1/sys/widgets/{id}",
+		"DELETE /v1/sys/widgets/{id}",
+		"POST /v1/sys/widgets/test",
+		"POST /v1/sys/widgets/preview",
+	} {
+		if _, ok := c.Get(id); ok {
+			t.Errorf("%s is offered", id)
+		}
+	}
+}

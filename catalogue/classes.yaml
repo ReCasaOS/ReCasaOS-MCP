@@ -268,4 +268,6 @@
 "GET /v1/sys/version": read # installed and newest ReCasaOS version
 "GET /v1/sys/version/check": read # installed and newest ReCasaOS version
 "GET /v1/sys/version/current": read # installed ReCasaOS version
+"GET /v1/sys/widgets": secret # the dashboard's API widgets: the addresses the box reads and their recipes
+"GET /v1/sys/widgets/{id}/card": secret # one API widget's card (the box reads the address the owner set)
 "GET /v1/sys/wsssh": never # interactive SSH terminal websocket
